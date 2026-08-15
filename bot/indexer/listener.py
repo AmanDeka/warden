@@ -18,38 +18,47 @@ def _serialize_embeds(message: discord.Message) -> str:
     return json.dumps([e.to_dict() for e in message.embeds])
 
 
+async def write_message(conn, message: discord.Message) -> None:
+    """Insert (or refresh) one message row + its messages_fts entry on an open connection.
+
+    Caller is responsible for commit(); this only stages the writes so callers
+    (e.g. the backfill job) can batch many messages per transaction.
+    """
+    content = message.content or ""
+
+    await conn.execute(
+        """
+        INSERT INTO messages
+            (message_id, guild_id, channel_id, author_id, content, attachments, embeds, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(message_id) DO UPDATE SET
+            content=excluded.content,
+            attachments=excluded.attachments,
+            embeds=excluded.embeds
+        """,
+        (
+            message.id,
+            message.guild.id,
+            message.channel.id,
+            message.author.id,
+            content,
+            _serialize_attachments(message),
+            _serialize_embeds(message),
+            message.created_at.isoformat(),
+        ),
+    )
+    await conn.execute(
+        "INSERT INTO messages_fts(rowid, content) VALUES (?, ?)",
+        (message.id, content),
+    )
+
+
 async def on_message(message: discord.Message) -> None:
     if message.guild is None:
         return
 
-    content = message.content or ""
-
     async with db.connect() as conn:
-        await conn.execute(
-            """
-            INSERT INTO messages
-                (message_id, guild_id, channel_id, author_id, content, attachments, embeds, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(message_id) DO UPDATE SET
-                content=excluded.content,
-                attachments=excluded.attachments,
-                embeds=excluded.embeds
-            """,
-            (
-                message.id,
-                message.guild.id,
-                message.channel.id,
-                message.author.id,
-                content,
-                _serialize_attachments(message),
-                _serialize_embeds(message),
-                message.created_at.isoformat(),
-            ),
-        )
-        await conn.execute(
-            "INSERT INTO messages_fts(rowid, content) VALUES (?, ?)",
-            (message.id, content),
-        )
+        await write_message(conn, message)
         await conn.commit()
 
 

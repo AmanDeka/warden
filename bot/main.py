@@ -1,11 +1,12 @@
 """Entrypoint: gateway listener and event handlers."""
 
+import asyncio
 import os
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from bot.indexer import listener
+from bot.indexer import backfill, listener
 from bot.storage import db
 
 load_dotenv()
@@ -26,6 +27,17 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     await db.init()
     print(f"Warden online as {bot.user} (guild {GUILD_ID})")
+
+    guild = bot.get_guild(GUILD_ID)
+    if guild is not None:
+        asyncio.create_task(backfill.backfill_guild(guild))
+
+
+@bot.event
+async def on_guild_channel_create(channel: discord.abc.GuildChannel):
+    if channel.guild.id != GUILD_ID or not isinstance(channel, discord.TextChannel):
+        return
+    asyncio.create_task(backfill.backfill_channel(channel))
 
 
 @bot.event
