@@ -37,8 +37,9 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Claude Code local settings
+# Claude Code
 .claude/settings.local.json
+CLAUDE.md
 
 # Logs
 *.log
