@@ -1,11 +1,22 @@
 """Gateway event hooks: on_message / on_message_edit / on_message_delete (no LLM)."""
 
+import asyncio
 import json
 from datetime import datetime, timezone
 
 import discord
 
 from bot.storage import db
+from bot.tools.embeddings import get_embedding, store_embedding
+
+
+async def _index_embedding(message_id: int, content: str) -> None:
+    """Generate and store an embedding for a message; errors are logged, not raised."""
+    try:
+        embedding = await get_embedding(content)
+        await store_embedding(message_id, embedding)
+    except Exception as exc:
+        print(f"[embeddings] failed for message {message_id}: {exc}")
 
 
 def _serialize_attachments(message: discord.Message) -> str:
@@ -61,6 +72,9 @@ async def on_message(message: discord.Message) -> None:
         await write_message(conn, message)
         await conn.commit()
 
+    if message.content:
+        asyncio.create_task(_index_embedding(message.id, message.content))
+
 
 async def on_message_edit(before: discord.Message, after: discord.Message) -> None:
     if after.guild is None:
@@ -110,6 +124,9 @@ async def on_message_edit(before: discord.Message, after: discord.Message) -> No
             (after.id, new_content),
         )
         await conn.commit()
+
+    if after.content:
+        asyncio.create_task(_index_embedding(after.id, after.content))
 
 
 async def _soft_delete(message_id: int) -> None:

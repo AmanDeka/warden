@@ -61,6 +61,25 @@ CREATE TABLE IF NOT EXISTS permission_allowlist (
 );
 """
 
+CREATE_MESSAGE_EMBEDDINGS = """
+CREATE TABLE IF NOT EXISTS message_embeddings (
+    message_id INTEGER PRIMARY KEY,
+    embedding  TEXT NOT NULL   -- JSON array of floats
+);
+"""
+
+# Generic key/value store for runtime-configurable bot settings.
+CREATE_SETTINGS = """
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+"""
+
+DEFAULTS: dict[str, str] = {
+    "search_method": "fts",  # 'fts' | 'semantic'
+}
+
 
 async def init() -> None:
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -69,6 +88,31 @@ async def init() -> None:
         await conn.execute(CREATE_AUDIT_LOG)
         await conn.execute(CREATE_CONVERSATION_CONTEXT)
         await conn.execute(CREATE_PERMISSION_ALLOWLIST)
+        await conn.execute(CREATE_MESSAGE_EMBEDDINGS)
+        await conn.execute(CREATE_SETTINGS)
+        for key, value in DEFAULTS.items():
+            await conn.execute(
+                "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
+                (key, value),
+            )
+        await conn.commit()
+
+
+async def get_setting(key: str) -> str | None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        async with conn.execute(
+            "SELECT value FROM settings WHERE key = ?", (key,)
+        ) as cursor:
+            row = await cursor.fetchone()
+    return row[0] if row else None
+
+
+async def set_setting(key: str, value: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)",
+            (key, value),
+        )
         await conn.commit()
 
 

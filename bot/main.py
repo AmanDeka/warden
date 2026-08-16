@@ -3,6 +3,7 @@
 import asyncio
 import os
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -26,11 +27,36 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await db.init()
+    guild_obj = discord.Object(id=GUILD_ID)
+    await bot.tree.sync(guild=guild_obj)
     print(f"Warden online as {bot.user} (guild {GUILD_ID})")
 
     guild = bot.get_guild(GUILD_ID)
     if guild is not None:
         asyncio.create_task(backfill.backfill_guild(guild))
+
+
+@bot.tree.command(
+    name="search-mode",
+    description="Switch the search backend (admin only)",
+    guild=discord.Object(id=GUILD_ID),
+)
+@app_commands.describe(mode="fts = keyword search, semantic = AI similarity search")
+@app_commands.choices(mode=[
+    app_commands.Choice(name="FTS — fast keyword search (no API cost)", value="fts"),
+    app_commands.Choice(name="Semantic — AI similarity search (Gemini embeddings)", value="semantic"),
+])
+async def search_mode_cmd(interaction: discord.Interaction, mode: app_commands.Choice[str]):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            "Only server administrators can change the search mode.", ephemeral=True
+        )
+        return
+    await db.set_setting("search_method", mode.value)
+    label = "FTS (keyword)" if mode.value == "fts" else "Semantic (Gemini embeddings)"
+    await interaction.response.send_message(
+        f"Search mode switched to **{label}**.", ephemeral=True
+    )
 
 
 @bot.event
