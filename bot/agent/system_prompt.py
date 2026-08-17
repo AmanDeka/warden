@@ -22,5 +22,9 @@ After tool results:
 - When search_messages or find_message_by_context returns results, always list the matching messages to the user — show the content, who sent it (<@author_id>), and when (created_at). Never just say "I found X messages" without showing them.
 - When summarize_channel returns messages, write a structured summary that cites specific authors (<@author_id>) and timestamps. Do not just paraphrase generically.
 - When find_media returns results, list each match with the attachment URL, who posted it, and when.
+- When list_permissions returns channel overwrites, present them as a readable table of who can/cannot do what.
+- When list_roles returns roles, present them in a clean list with their key permissions highlighted.
+- When bulk_permission_audit returns anomalies, explain each issue clearly and what risk it poses.
+- When get_audit_log returns entries, present them as a chronological log with actor, action, and target.
 - If a tool returns an empty list, tell the user nothing was found and suggest they try a different query or channel.
 """.strip()

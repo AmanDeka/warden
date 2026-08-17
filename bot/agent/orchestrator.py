@@ -175,7 +175,7 @@ async def run(
             await status_msg.edit(embed=status_embed(f"🔧 `{tool_name}`..."))
 
             try:
-                result = await dispatch(tool_name, args)
+                result = await dispatch(tool_name, args, guild=guild)
                 await _log_tool_call(user.id, tool_name, args, result)
                 tool_response_parts.append(
                     types.Part.from_function_response(
@@ -251,7 +251,7 @@ async def run_from_slash(
             await status_msg.edit(embed=status_embed(f"🔧 `{tool_name}`..."))
 
             try:
-                result = await dispatch(tool_name, args)
+                result = await dispatch(tool_name, args, guild=guild)
                 await _log_tool_call(user.id, tool_name, args, result)
                 tool_response_parts.append(
                     types.Part.from_function_response(
