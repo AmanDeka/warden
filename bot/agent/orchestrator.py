@@ -196,9 +196,7 @@ async def run(
                 )
                 await status_msg.edit(embed=status_embed(f"⚠️ `{tool_name}` failed: {exc}"))
 
-        response = await chat.send_message(
-            types.Content(role="user", parts=tool_response_parts)
-        )
+        response = await chat.send_message(tool_response_parts)
 
     final_text = response.text or "_(no response)_"
 
@@ -277,9 +275,7 @@ async def run_from_slash(
                 )
                 await status_msg.edit(embed=status_embed(f"⚠️ `{tool_name}` failed: {exc}"))
 
-        response = await chat.send_message(
-            types.Content(role="user", parts=tool_response_parts)
-        )
+        response = await chat.send_message(tool_response_parts)
 
     final_text = response.text or "_(no response)_"
 
