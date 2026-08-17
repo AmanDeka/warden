@@ -187,7 +187,12 @@ Scans every channel and flags:
 | `conversation_context` | Per-user conversation history (cross-channel) |
 | `audit_log` | Every tool call: who ran what, with what args, and what happened |
 | `permission_allowlist` | Roles authorised to use write/permission tools |
+| `indexed_channels` | Whitelist of channels the indexer watches (empty = all channels) |
 | `settings` | Runtime key/value config (e.g. `search_method`) |
+
+### Channel index whitelist
+
+By default Warden indexes all channels. Once any channel is added to the whitelist, only whitelisted channels are indexed for new messages, edits, and backfills. The whitelist persists across restarts (stored in SQLite) and is cached in memory so there is no DB hit on every message.
 
 ### Slash commands
 
@@ -195,6 +200,9 @@ Scans every channel and flags:
 |---|---|---|
 | `/ask <question>` | Everyone | Ask Warden something directly |
 | `/search-mode [fts\|semantic]` | Admins | Switch the search backend |
+| `/index-channels list` | Admins | Show which channels are currently being indexed |
+| `/index-channels add #channel` | Admins | Add a channel to the whitelist and backfill its history |
+| `/index-channels remove #channel` | Admins | Remove a channel from the whitelist (existing data kept) |
 
 ---
 
