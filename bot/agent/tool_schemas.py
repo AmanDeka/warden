@@ -272,35 +272,6 @@ _bulk_permission_audit = types.FunctionDeclaration(
 )
 
 # ---------------------------------------------------------------------------
-# Exported schemas
-# ---------------------------------------------------------------------------
-
-TOOLS = types.Tool(
-    function_declarations=[
-        # Phase 1 — read-only index tools
-        _search_messages,
-        _find_message_by_context,
-        _summarize_channel,
-        _find_media,
-        # Phase 2 — permission introspection
-        _list_permissions,
-        _list_roles,
-        _get_member_roles,
-        _get_audit_log,
-        _bulk_permission_audit,
-        # Phase 3 — guarded write tools
-        _assign_role,
-        _remove_role,
-        _set_channel_permission,
-        _create_role,
-        _delete_role,
-        _fix_bot_access,
-    ]
-)
-
-TOOL_SCHEMAS: list[types.Tool] = [TOOLS]
-
-# ---------------------------------------------------------------------------
 # assign_role
 # ---------------------------------------------------------------------------
 
@@ -430,6 +401,35 @@ _fix_bot_access = types.FunctionDeclaration(
         required=["channel_id", "bot_name_or_id"],
     ),
 )
+
+# ---------------------------------------------------------------------------
+# Exported schemas
+# ---------------------------------------------------------------------------
+
+TOOLS = types.Tool(
+    function_declarations=[
+        # Phase 1 — read-only index tools
+        _search_messages,
+        _find_message_by_context,
+        _summarize_channel,
+        _find_media,
+        # Phase 2 — permission introspection
+        _list_permissions,
+        _list_roles,
+        _get_member_roles,
+        _get_audit_log,
+        _bulk_permission_audit,
+        # Phase 3 — guarded write tools
+        _assign_role,
+        _remove_role,
+        _set_channel_permission,
+        _create_role,
+        _delete_role,
+        _fix_bot_access,
+    ]
+)
+
+TOOL_SCHEMAS: list[types.Tool] = [TOOLS]
 
 # ---------------------------------------------------------------------------
 # Write-tool registry
