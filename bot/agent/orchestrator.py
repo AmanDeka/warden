@@ -206,3 +206,84 @@ async def run(
     await _save_turn(user.id, channel_id, "model", final_text)
 
     return final_text
+
+
+async def run_from_slash(
+    question: str,
+    user: discord.Member | discord.User,
+    guild: discord.Guild | None,
+    bot_user: discord.ClientUser,
+    status_msg: discord.Message,
+) -> str:
+    """Same tool-call loop as ``run()``, but invoked from the /ask slash command.
+
+    Accepts a plain question string and the interaction user directly, rather
+    than a full ``discord.Message``.  Conversation history is keyed by user_id
+    so continuity is preserved across both mention-based and slash invocations.
+    """
+    if GUILD_ID is None:
+        raise RuntimeError("GUILD_ID is not set. Load your .env file before starting the bot.")
+
+    channel_id = status_msg.channel.id
+    history = await _load_history(user.id)
+    context_block = _build_context(guild, user)
+
+    first_message = f"[Server context]\n{context_block}\n\n{question}"
+
+    client = get_client()
+    chat = client.aio.chats.create(
+        model=MODEL,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            tools=TOOL_SCHEMAS,
+        ),
+        history=history,
+    )
+
+    await status_msg.edit(embed=status_embed("🧠 Thinking..."))
+    response = await chat.send_message(first_message)
+
+    for _ in range(MAX_ITERATIONS):
+        parts = response.candidates[0].content.parts
+        function_calls = [p.function_call for p in parts if p.function_call is not None]
+
+        if not function_calls:
+            break
+
+        tool_response_parts: list[types.Part] = []
+
+        for fc in function_calls:
+            tool_name = fc.name
+            args = dict(fc.args)
+
+            await status_msg.edit(embed=status_embed(f"🔧 `{tool_name}`..."))
+
+            try:
+                result = await dispatch(tool_name, args)
+                await _log_tool_call(user.id, tool_name, args, result)
+                tool_response_parts.append(
+                    types.Part.from_function_response(
+                        name=tool_name,
+                        response={"result": result},
+                    )
+                )
+                await status_msg.edit(embed=status_embed(f"✅ `{tool_name}` done"))
+            except Exception as exc:
+                tool_response_parts.append(
+                    types.Part.from_function_response(
+                        name=tool_name,
+                        response={"error": str(exc)},
+                    )
+                )
+                await status_msg.edit(embed=status_embed(f"⚠️ `{tool_name}` failed: {exc}"))
+
+        response = await chat.send_message(
+            types.Content(role="user", parts=tool_response_parts)
+        )
+
+    final_text = response.text or "_(no response)_"
+
+    await _save_turn(user.id, channel_id, "user", question)
+    await _save_turn(user.id, channel_id, "model", final_text)
+
+    return final_text

@@ -60,6 +60,28 @@ async def search_mode_cmd(interaction: discord.Interaction, mode: app_commands.C
     )
 
 
+@bot.tree.command(
+    name="ask",
+    description="Ask Warden something in natural language",
+    guild=discord.Object(id=GUILD_ID),
+)
+@app_commands.describe(question="What do you want to ask?")
+async def ask_cmd(interaction: discord.Interaction, question: str):
+    await interaction.response.defer()
+    status_msg = await interaction.followup.send(embed=status_embed("🧠 Thinking..."))
+    try:
+        # Build a minimal pseudo-message so the orchestrator can work with it.
+        # We pass None as guild when invoked from a DM context.
+        guild = interaction.guild
+        answer = await orchestrator.run_from_slash(
+            question, interaction.user, guild, bot.user, status_msg
+        )
+        await interaction.followup.send(embed=answer_embed(answer))
+    except Exception as exc:
+        await status_msg.edit(embed=status_embed(f"⚠️ Something went wrong: {exc}"))
+        raise
+
+
 @bot.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID or not isinstance(channel, discord.TextChannel):
