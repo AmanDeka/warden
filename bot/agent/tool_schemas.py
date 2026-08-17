@@ -265,17 +265,12 @@ _bulk_permission_audit = types.FunctionDeclaration(
 # Exported schemas
 # ---------------------------------------------------------------------------
 
-PHASE1_TOOLS = types.Tool(
+TOOLS = types.Tool(
     function_declarations=[
         _search_messages,
         _find_message_by_context,
         _summarize_channel,
         _find_media,
-    ]
-)
-
-PHASE2_TOOLS = types.Tool(
-    function_declarations=[
         _list_permissions,
         _list_roles,
         _get_member_roles,
@@ -284,9 +279,7 @@ PHASE2_TOOLS = types.Tool(
     ]
 )
 
-# TOOL_SCHEMAS is the list passed to the Gemini client on every chat session.
-# Extend this list as phases are implemented.
-TOOL_SCHEMAS: list[types.Tool] = [PHASE1_TOOLS, PHASE2_TOOLS]
+TOOL_SCHEMAS: list[types.Tool] = [TOOLS]
 
 # ---------------------------------------------------------------------------
 # Dispatcher
