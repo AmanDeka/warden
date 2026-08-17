@@ -177,6 +177,34 @@ Scans every channel and flags:
 - `@everyone` granted dangerous permissions in a channel
 - Channels completely inaccessible to everyone
 
+### Write tools (Phase 3)
+
+All write tools require the requesting user to hold a role on the [permissions allowlist](#permissions-allowlist). Before executing, Warden shows the proposed change in the status box and waits for a ✅/❌ reaction. Cancelling or ignoring (60s timeout) aborts the action.
+
+#### `assign_role(user_id, role_id)`
+
+Adds a role to a server member. Warden's own role must sit above the target role in the hierarchy or Discord will reject it.
+
+#### `remove_role(user_id, role_id)`
+
+Removes a role from a server member. Same hierarchy constraint as `assign_role`.
+
+#### `set_channel_permission(channel_id, target_id, allow, deny)`
+
+Sets a permission overwrite on a channel for a role or member. `allow` and `deny` are lists of discord.py permission names in snake_case (e.g. `view_channel`, `send_messages`, `read_message_history`). Either list can be empty.
+
+#### `create_role(name, permissions?, color?)`
+
+Creates a new server role. `permissions` is an optional list of snake_case permission names. `color` is an optional hex string (e.g. `#ff0000`).
+
+#### `delete_role(role_id)`
+
+Permanently deletes a role. Refuses to delete integration-managed roles.
+
+#### `fix_bot_access(channel_id, bot_name_or_id)`
+
+Diagnoses why another bot can't operate in a channel. Resolves the bot by display name or user ID, walks the full permission stack (server roles → category overwrite → channel overwrite), and identifies which required permissions are missing and why. Returns a ready-to-use `set_channel_permission` call as the proposed fix — does not apply it automatically.
+
 ### Storage
 
 | Table | Purpose |
@@ -217,15 +245,13 @@ The allowlist is stored in the `permission_allowlist` table and cached in memory
 
 ## Upcoming features
 
-### Phase 3 — Guarded writes
+### Phase 3 — Guarded writes ✅
 
-Requires the requesting user to hold a role on the owner-configured allowlist — Discord's own `Manage Roles` permission is not sufficient on its own.
-
-- [ ] `assign_role` / `remove_role` — add or remove a role from a member
-- [ ] `set_channel_permission` — set a permission overwrite for a role/user on a channel
-- [ ] `create_role` / `delete_role` — create or remove roles
-- [ ] `fix_bot_access` — diagnose why another bot can't operate in a channel and propose a minimal fix
-- [ ] Confirmation flow — bot proposes exact diff in the status embed, user reacts ✅/❌ to confirm or cancel
+- [x] `assign_role` / `remove_role` — add or remove a role from a member
+- [x] `set_channel_permission` — set a permission overwrite for a role/user on a channel
+- [x] `create_role` / `delete_role` — create or remove roles
+- [x] `fix_bot_access` — diagnose why another bot can't operate in a channel and propose a minimal fix
+- [x] Confirmation flow — bot proposes exact diff in the status embed, user reacts ✅/❌ to confirm or cancel
 - [ ] Full audit logging for all executed write actions
 
 ### Phase 4 — Cleanup automation
@@ -293,7 +319,7 @@ warden/
 │   │   ├── backfill.py       # one-time throttled history backfill on startup
 │   │   └── retention_sweep.py # scheduled purge of old soft-deleted rows
 │   ├── guardrails/
-│   │   ├── confirmation.py   # diff preview + reaction confirm flow (Phase 3)
+│   │   ├── confirmation.py   # diff preview + ✅/❌ reaction confirm flow
 │   │   └── auth.py           # allowlist check for write tools
 │   ├── storage/
 │   │   ├── db.py             # SQLite setup, settings helpers
