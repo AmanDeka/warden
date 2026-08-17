@@ -175,3 +175,59 @@ async def remove_indexed_channel(channel_id: int) -> None:
         )
         await conn.commit()
     _invalidate_channel_cache()
+
+
+# ---------------------------------------------------------------------------
+# Permission allowlist — in-memory cache mirrors indexed_channels pattern
+# ---------------------------------------------------------------------------
+
+_allowlist_role_ids: set[int] | None = None  # None = not yet loaded
+
+
+def _invalidate_allowlist_cache() -> None:
+    global _allowlist_role_ids
+    _allowlist_role_ids = None
+
+
+async def get_allowlist_role_ids() -> set[int]:
+    global _allowlist_role_ids
+    if _allowlist_role_ids is None:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            async with conn.execute("SELECT role_id FROM permission_allowlist") as cursor:
+                rows = await cursor.fetchall()
+        _allowlist_role_ids = {row[0] for row in rows}
+    return _allowlist_role_ids
+
+
+async def add_allowlist_role(role_id: int, guild_id: int, added_by: int) -> None:
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT OR IGNORE INTO permission_allowlist(role_id, guild_id, added_by, added_at)"
+            " VALUES (?, ?, ?, ?)",
+            (role_id, guild_id, added_by, now),
+        )
+        await conn.commit()
+    _invalidate_allowlist_cache()
+
+
+async def remove_allowlist_role(role_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "DELETE FROM permission_allowlist WHERE role_id = ?",
+            (role_id,),
+        )
+        await conn.commit()
+    _invalidate_allowlist_cache()
+
+
+async def get_allowlist_entries() -> list[dict]:
+    """Return full rows for the /list command (role_id, added_by, added_at)."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            "SELECT role_id, added_by, added_at FROM permission_allowlist ORDER BY added_at"
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [dict(r) for r in rows]

@@ -194,6 +194,12 @@ Scans every channel and flags:
 
 By default Warden indexes all channels. Once any channel is added to the whitelist, only whitelisted channels are indexed for new messages, edits, and backfills. The whitelist persists across restarts (stored in SQLite) and is cached in memory so there is no DB hit on every message.
 
+### Permissions allowlist
+
+Write tools (Phase 3) require the requesting user to hold a role on an explicit owner-configured allowlist — Discord's own `Manage Roles` permission is not sufficient on its own. This prevents scope creep where "can manage permissions manually" silently becomes "can direct the bot to manage permissions."
+
+The allowlist is stored in the `permission_allowlist` table and cached in memory so there is no DB hit on every tool invocation. It is managed via `/permissions-allowlist` (owner/admin only). The allowlist starts empty — no one can invoke write tools until a role is explicitly added.
+
 ### Slash commands
 
 | Command | Who | What |
@@ -203,6 +209,9 @@ By default Warden indexes all channels. Once any channel is added to the whiteli
 | `/index-channels list` | Admins | Show which channels are currently being indexed |
 | `/index-channels add #channel` | Admins | Add a channel to the whitelist and backfill its history |
 | `/index-channels remove #channel` | Admins | Remove a channel from the whitelist (existing data kept) |
+| `/permissions-allowlist list` | Owner / Admins | Show which roles can invoke write/permission tools |
+| `/permissions-allowlist add @role` | Owner / Admins | Grant a role access to write/permission tools |
+| `/permissions-allowlist remove @role` | Owner / Admins | Revoke a role's access to write/permission tools |
 
 ---
 
@@ -217,7 +226,6 @@ Requires the requesting user to hold a role on the owner-configured allowlist �
 - [ ] `create_role` / `delete_role` — create or remove roles
 - [ ] `fix_bot_access` — diagnose why another bot can't operate in a channel and propose a minimal fix
 - [ ] Confirmation flow — bot proposes exact diff in the status embed, user reacts ✅/❌ to confirm or cancel
-- [ ] `/permissions-allowlist add|remove|list` — owner-only command to configure who can invoke write tools
 - [ ] Full audit logging for all executed write actions
 
 ### Phase 4 — Cleanup automation
@@ -286,7 +294,7 @@ warden/
 │   │   └── retention_sweep.py # scheduled purge of old soft-deleted rows
 │   ├── guardrails/
 │   │   ├── confirmation.py   # diff preview + reaction confirm flow (Phase 3)
-│   │   └── auth.py           # allowlist check for write tools (Phase 3)
+│   │   └── auth.py           # allowlist check for write tools
 │   ├── storage/
 │   │   ├── db.py             # SQLite setup, settings helpers
 │   │   └── models.py         # dataclasses for all table rows

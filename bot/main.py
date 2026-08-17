@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from bot.agent import orchestrator
+from bot.guardrails import auth
 from bot.indexer import backfill, listener
 from bot.storage import db
 from bot.utils.formatting import answer_embed, status_embed
@@ -143,6 +144,97 @@ async def index_remove(interaction: discord.Interaction, channel: discord.TextCh
 
 
 bot.tree.add_command(index_group, guild=discord.Object(id=GUILD_ID))
+
+
+# ---------------------------------------------------------------------------
+# /permissions-allowlist — owner-only: controls who can invoke write tools
+# ---------------------------------------------------------------------------
+
+allowlist_group = app_commands.Group(
+    name="permissions-allowlist",
+    description="Manage which roles can use Warden's write/permission tools (owner only)",
+)
+
+
+def _is_owner_or_admin(interaction: discord.Interaction) -> bool:
+    return (
+        interaction.user.id == interaction.guild.owner_id
+        or interaction.user.guild_permissions.administrator
+    )
+
+
+@allowlist_group.command(name="add", description="Grant a role access to write/permission tools")
+@app_commands.describe(role="Role to allow")
+async def allowlist_add(interaction: discord.Interaction, role: discord.Role) -> None:
+    if not _is_owner_or_admin(interaction):
+        await interaction.response.send_message(
+            "Only the server owner or an administrator can modify the permissions allowlist.",
+            ephemeral=True,
+        )
+        return
+    current = await db.get_allowlist_role_ids()
+    if role.id in current:
+        await interaction.response.send_message(
+            f"**{role.name}** is already on the allowlist.", ephemeral=True
+        )
+        return
+    await auth.add_to_allowlist(role, interaction.user)
+    await interaction.response.send_message(
+        f"Added **{role.name}** to the permissions allowlist. "
+        "Members with this role can now invoke Warden's write tools.",
+        ephemeral=True,
+    )
+
+
+@allowlist_group.command(name="remove", description="Revoke a role's access to write/permission tools")
+@app_commands.describe(role="Role to remove")
+async def allowlist_remove(interaction: discord.Interaction, role: discord.Role) -> None:
+    if not _is_owner_or_admin(interaction):
+        await interaction.response.send_message(
+            "Only the server owner or an administrator can modify the permissions allowlist.",
+            ephemeral=True,
+        )
+        return
+    removed = await auth.remove_from_allowlist(role)
+    if not removed:
+        await interaction.response.send_message(
+            f"**{role.name}** is not on the allowlist.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(
+        f"Removed **{role.name}** from the permissions allowlist.", ephemeral=True
+    )
+
+
+@allowlist_group.command(name="list", description="Show all roles that can use write/permission tools")
+async def allowlist_list(interaction: discord.Interaction) -> None:
+    if not _is_owner_or_admin(interaction):
+        await interaction.response.send_message(
+            "Only the server owner or an administrator can view the permissions allowlist.",
+            ephemeral=True,
+        )
+        return
+    entries = await auth.list_allowlist()
+    if not entries:
+        await interaction.response.send_message(
+            "The permissions allowlist is empty — no roles can use write tools yet.\n"
+            "Use `/permissions-allowlist add @role` to grant access.",
+            ephemeral=True,
+        )
+        return
+    lines = []
+    for entry in entries:
+        role = interaction.guild.get_role(entry["role_id"])
+        role_label = f"**{role.name}**" if role else f"<deleted role {entry['role_id']}>"
+        adder = interaction.guild.get_member(entry["added_by"])
+        adder_label = adder.display_name if adder else f"<user {entry['added_by']}>"
+        lines.append(f"• {role_label} — added by {adder_label} on {entry['added_at'][:10]}")
+    await interaction.response.send_message(
+        "**Permissions allowlist:**\n" + "\n".join(lines), ephemeral=True
+    )
+
+
+bot.tree.add_command(allowlist_group, guild=discord.Object(id=GUILD_ID))
 
 
 @bot.event
