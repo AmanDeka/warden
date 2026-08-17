@@ -17,7 +17,7 @@ MAX_ITERATIONS = 5
 MAX_HISTORY_TURNS = 20
 MODEL = "gemini-3.5-flash"
 
-GUILD_ID = os.getenv("GUILD_ID")
+GUILD_ID = int(os.environ["GUILD_ID"])
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +136,6 @@ async def run(
     Saves the completed user+model turn to conversation history.
     Logs every tool call to the audit table.
     """
-    if GUILD_ID is None:
-        raise RuntimeError("GUILD_ID is not set. Load your .env file before starting the bot.")
-
     user = message.author
     channel_id = message.channel.id
     user_text = _strip_mention(message.content, bot_user.id)
@@ -219,9 +216,6 @@ async def run_from_slash(
     than a full ``discord.Message``.  Conversation history is keyed by user_id
     so continuity is preserved across both mention-based and slash invocations.
     """
-    if GUILD_ID is None:
-        raise RuntimeError("GUILD_ID is not set. Load your .env file before starting the bot.")
-
     channel_id = status_msg.channel.id
     history = await _load_history(user.id)
     context_block = _build_context(guild, user)

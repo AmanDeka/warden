@@ -15,10 +15,11 @@ from bot.storage import db
 from bot.utils.formatting import answer_embed, status_embed
 
 DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
-GUILD_ID = os.environ["GUILD_ID"]
+GUILD_ID = int(os.environ["GUILD_ID"])
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 intents.guild_messages = True
 intents.reactions = True
 
@@ -132,5 +133,9 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
     await listener.on_raw_message_delete(payload)
 
 
-if __name__ == "__main__":
+def main():
     bot.run(DISCORD_TOKEN)
+
+
+if __name__ == "__main__":
+    main()
