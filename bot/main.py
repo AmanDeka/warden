@@ -7,8 +7,10 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from bot.agent import orchestrator
 from bot.indexer import backfill, listener
 from bot.storage import db
+from bot.utils.formatting import answer_embed, status_embed
 
 load_dotenv()
 
@@ -82,8 +84,14 @@ async def on_message(message: discord.Message):
     is_dm = isinstance(message.channel, discord.DMChannel)
 
     if bot_mentioned or reply_to_bot or is_dm:
-        # TODO: route to agent orchestrator
-        pass
+        guild = message.guild
+        status_msg = await message.channel.send(embed=status_embed("🧠 Thinking..."))
+        try:
+            answer = await orchestrator.run(message, guild, bot.user, status_msg)
+            await message.channel.send(embed=answer_embed(answer))
+        except Exception as exc:
+            await status_msg.edit(embed=status_embed(f"⚠️ Something went wrong: {exc}"))
+            raise
 
     await bot.process_commands(message)
 
