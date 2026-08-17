@@ -17,7 +17,7 @@ MAX_ITERATIONS = 5
 MAX_HISTORY_TURNS = 20
 MODEL = "gemini-2.0-flash"
 
-GUILD_ID = int(os.environ["GUILD_ID"])
+GUILD_ID = os.getenv("GUILD_ID")
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +136,9 @@ async def run(
     Saves the completed user+model turn to conversation history.
     Logs every tool call to the audit table.
     """
+    if GUILD_ID is None:
+        raise RuntimeError("GUILD_ID is not set. Load your .env file before starting the bot.")
+
     user = message.author
     channel_id = message.channel.id
     user_text = _strip_mention(message.content, bot_user.id)

@@ -7,21 +7,20 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
+load_dotenv()
+
 from bot.agent import orchestrator
 from bot.indexer import backfill, listener
 from bot.storage import db
 from bot.utils.formatting import answer_embed, status_embed
 
-load_dotenv()
-
 DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
-GUILD_ID = int(os.environ["GUILD_ID"])
+GUILD_ID = os.environ["GUILD_ID"]
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
 intents.guild_messages = True
-intents.guild_message_reactions = True
+intents.reactions = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
