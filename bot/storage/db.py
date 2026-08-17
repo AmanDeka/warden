@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS permission_allowlist (
 );
 """
 
+CREATE_INDEXED_CHANNELS = """
+CREATE TABLE IF NOT EXISTS indexed_channels (
+    channel_id INTEGER PRIMARY KEY,
+    guild_id   INTEGER NOT NULL,
+    added_at   TEXT NOT NULL
+);
+"""
+
 CREATE_MESSAGE_EMBEDDINGS = """
 CREATE TABLE IF NOT EXISTS message_embeddings (
     message_id INTEGER PRIMARY KEY,
@@ -88,6 +96,7 @@ async def init() -> None:
         await conn.execute(CREATE_AUDIT_LOG)
         await conn.execute(CREATE_CONVERSATION_CONTEXT)
         await conn.execute(CREATE_PERMISSION_ALLOWLIST)
+        await conn.execute(CREATE_INDEXED_CHANNELS)
         await conn.execute(CREATE_MESSAGE_EMBEDDINGS)
         await conn.execute(CREATE_SETTINGS)
         for key, value in DEFAULTS.items():
@@ -118,3 +127,51 @@ async def set_setting(key: str, value: str) -> None:
 
 def connect() -> aiosqlite.Connection:
     return aiosqlite.connect(DB_PATH)
+
+
+# ---------------------------------------------------------------------------
+# Indexed channels — in-memory cache so every on_message doesn't hit the DB
+# ---------------------------------------------------------------------------
+
+_indexed_channel_ids: set[int] | None = None  # None = not yet loaded
+
+
+def _invalidate_channel_cache() -> None:
+    global _indexed_channel_ids
+    _indexed_channel_ids = None
+
+
+async def get_indexed_channel_ids() -> set[int]:
+    """Return the set of channel IDs to index.
+
+    An empty set means no whitelist is configured — index all channels.
+    """
+    global _indexed_channel_ids
+    if _indexed_channel_ids is None:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            async with conn.execute("SELECT channel_id FROM indexed_channels") as cursor:
+                rows = await cursor.fetchall()
+        _indexed_channel_ids = {row[0] for row in rows}
+    return _indexed_channel_ids
+
+
+async def add_indexed_channel(channel_id: int, guild_id: int) -> None:
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "INSERT OR IGNORE INTO indexed_channels(channel_id, guild_id, added_at) VALUES (?, ?, ?)",
+            (channel_id, guild_id, now),
+        )
+        await conn.commit()
+    _invalidate_channel_cache()
+
+
+async def remove_indexed_channel(channel_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "DELETE FROM indexed_channels WHERE channel_id = ?",
+            (channel_id,),
+        )
+        await conn.commit()
+    _invalidate_channel_cache()

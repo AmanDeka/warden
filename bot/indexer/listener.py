@@ -68,6 +68,10 @@ async def on_message(message: discord.Message) -> None:
     if message.guild is None:
         return
 
+    indexed = await db.get_indexed_channel_ids()
+    if indexed and message.channel.id not in indexed:
+        return
+
     async with db.connect() as conn:
         await write_message(conn, message)
         await conn.commit()
@@ -78,6 +82,10 @@ async def on_message(message: discord.Message) -> None:
 
 async def on_message_edit(before: discord.Message, after: discord.Message) -> None:
     if after.guild is None:
+        return
+
+    indexed = await db.get_indexed_channel_ids()
+    if indexed and after.channel.id not in indexed:
         return
 
     now = datetime.now(timezone.utc).isoformat()

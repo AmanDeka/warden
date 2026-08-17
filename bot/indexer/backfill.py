@@ -57,6 +57,11 @@ async def backfill_channel(channel: discord.TextChannel) -> None:
 
 
 async def backfill_guild(guild: discord.Guild) -> None:
-    for channel in guild.text_channels:
+    indexed = await db.get_indexed_channel_ids()
+    channels = [
+        ch for ch in guild.text_channels
+        if not indexed or ch.id in indexed
+    ]
+    for channel in channels:
         await backfill_channel(channel)
         await asyncio.sleep(BACKFILL_DELAY)

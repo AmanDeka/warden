@@ -83,6 +83,68 @@ async def ask_cmd(interaction: discord.Interaction, question: str):
         raise
 
 
+index_group = app_commands.Group(
+    name="index-channels",
+    description="Manage which channels Warden indexes",
+)
+
+
+@index_group.command(name="list", description="Show all channels currently being indexed")
+async def index_list(interaction: discord.Interaction) -> None:
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Only administrators can manage indexed channels.", ephemeral=True)
+        return
+    ids = await db.get_indexed_channel_ids()
+    if not ids:
+        await interaction.response.send_message(
+            "No channel whitelist configured — **all channels** are currently being indexed.", ephemeral=True
+        )
+        return
+    lines = []
+    for cid in sorted(ids):
+        ch = interaction.guild.get_channel(cid)
+        lines.append(f"• #{ch.name}" if ch else f"• <deleted channel {cid}>")
+    await interaction.response.send_message(
+        "**Indexed channels:**\n" + "\n".join(lines), ephemeral=True
+    )
+
+
+@index_group.command(name="add", description="Add a channel to the index whitelist and backfill it")
+@app_commands.describe(channel="Channel to start indexing")
+async def index_add(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Only administrators can manage indexed channels.", ephemeral=True)
+        return
+    ids = await db.get_indexed_channel_ids()
+    if channel.id in ids:
+        await interaction.response.send_message(f"#{channel.name} is already in the index list.", ephemeral=True)
+        return
+    await db.add_indexed_channel(channel.id, interaction.guild.id)
+    await interaction.response.send_message(
+        f"Added #{channel.name} to the index list. Backfilling history now...", ephemeral=True
+    )
+    asyncio.create_task(backfill.backfill_channel(channel))
+
+
+@index_group.command(name="remove", description="Remove a channel from the index whitelist")
+@app_commands.describe(channel="Channel to stop indexing")
+async def index_remove(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Only administrators can manage indexed channels.", ephemeral=True)
+        return
+    ids = await db.get_indexed_channel_ids()
+    if channel.id not in ids:
+        await interaction.response.send_message(f"#{channel.name} is not in the index list.", ephemeral=True)
+        return
+    await db.remove_indexed_channel(channel.id)
+    await interaction.response.send_message(
+        f"Removed #{channel.name} from the index list. Existing indexed messages are kept.", ephemeral=True
+    )
+
+
+bot.tree.add_command(index_group, guild=discord.Object(id=GUILD_ID))
+
+
 @bot.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID or not isinstance(channel, discord.TextChannel):
