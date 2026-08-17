@@ -16,7 +16,17 @@ from google.genai import types
 
 from bot.tools.audit import _AUDIT_ACTIONS, bulk_permission_audit, get_audit_log
 from bot.tools.media import find_media
-from bot.tools.permissions import get_member_roles, list_permissions, list_roles
+from bot.tools.permissions import (
+    assign_role,
+    create_role,
+    delete_role,
+    fix_bot_access,
+    get_member_roles,
+    list_permissions,
+    list_roles,
+    remove_role,
+    set_channel_permission,
+)
 from bot.tools.search import find_message_by_context, search_messages
 from bot.tools.summarize import summarize_channel
 
@@ -267,19 +277,254 @@ _bulk_permission_audit = types.FunctionDeclaration(
 
 TOOLS = types.Tool(
     function_declarations=[
+        # Phase 1 — read-only index tools
         _search_messages,
         _find_message_by_context,
         _summarize_channel,
         _find_media,
+        # Phase 2 — permission introspection
         _list_permissions,
         _list_roles,
         _get_member_roles,
         _get_audit_log,
         _bulk_permission_audit,
+        # Phase 3 — guarded write tools
+        _assign_role,
+        _remove_role,
+        _set_channel_permission,
+        _create_role,
+        _delete_role,
+        _fix_bot_access,
     ]
 )
 
 TOOL_SCHEMAS: list[types.Tool] = [TOOLS]
+
+# ---------------------------------------------------------------------------
+# assign_role
+# ---------------------------------------------------------------------------
+
+_assign_role = types.FunctionDeclaration(
+    name="assign_role",
+    description="Add a role to a server member. Requires confirmation.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "user_id": types.Schema(type=types.Type.STRING, description="Discord user ID of the member."),
+            "role_id": types.Schema(type=types.Type.STRING, description="Discord role ID to assign."),
+        },
+        required=["user_id", "role_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# remove_role
+# ---------------------------------------------------------------------------
+
+_remove_role = types.FunctionDeclaration(
+    name="remove_role",
+    description="Remove a role from a server member. Requires confirmation.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "user_id": types.Schema(type=types.Type.STRING, description="Discord user ID of the member."),
+            "role_id": types.Schema(type=types.Type.STRING, description="Discord role ID to remove."),
+        },
+        required=["user_id", "role_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# set_channel_permission
+# ---------------------------------------------------------------------------
+
+_set_channel_permission = types.FunctionDeclaration(
+    name="set_channel_permission",
+    description=(
+        "Set a permission overwrite for a role or member on a specific channel. "
+        "Use discord.py permission names (snake_case): view_channel, send_messages, "
+        "read_message_history, embed_links, manage_messages, etc. Requires confirmation."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "channel_id": types.Schema(type=types.Type.STRING, description="Channel to modify."),
+            "target_id": types.Schema(type=types.Type.STRING, description="Role or member ID to set the overwrite for."),
+            "allow": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(type=types.Type.STRING),
+                description="Permission names to explicitly allow.",
+            ),
+            "deny": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(type=types.Type.STRING),
+                description="Permission names to explicitly deny.",
+            ),
+        },
+        required=["channel_id", "target_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# create_role
+# ---------------------------------------------------------------------------
+
+_create_role = types.FunctionDeclaration(
+    name="create_role",
+    description="Create a new server role. Requires confirmation.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "name": types.Schema(type=types.Type.STRING, description="Name for the new role."),
+            "permissions": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(type=types.Type.STRING),
+                description="List of discord.py permission names to grant (snake_case). Omit for no permissions.",
+            ),
+            "color": types.Schema(
+                type=types.Type.STRING,
+                description="Hex color code for the role, e.g. #ff0000. Omit for default.",
+            ),
+        },
+        required=["name"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# delete_role
+# ---------------------------------------------------------------------------
+
+_delete_role = types.FunctionDeclaration(
+    name="delete_role",
+    description="Permanently delete a server role. Requires confirmation.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "role_id": types.Schema(type=types.Type.STRING, description="ID of the role to delete."),
+        },
+        required=["role_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# fix_bot_access
+# ---------------------------------------------------------------------------
+
+_fix_bot_access = types.FunctionDeclaration(
+    name="fix_bot_access",
+    description=(
+        "Diagnose why another bot can't operate in a channel. "
+        "Walks the permission stack (server roles → category → channel overwrite), "
+        "identifies which required permissions are missing, and proposes a minimal overwrite fix. "
+        "Does not apply the fix — use set_channel_permission with the proposed args to do that."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "channel_id": types.Schema(type=types.Type.STRING, description="Channel to diagnose."),
+            "bot_name_or_id": types.Schema(
+                type=types.Type.STRING,
+                description="The other bot's display name or Discord user ID.",
+            ),
+        },
+        required=["channel_id", "bot_name_or_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# Write-tool registry
+# ---------------------------------------------------------------------------
+
+WRITE_TOOLS: frozenset[str] = frozenset({
+    "assign_role",
+    "remove_role",
+    "set_channel_permission",
+    "clean_permissions",
+    "create_role",
+    "delete_role",
+    "fix_bot_access",
+})
+
+
+def describe_write_action(tool_name: str, args: dict, guild: discord.Guild | None) -> str:
+    """Return a plain-English one-liner (or short block) describing what the tool will do.
+
+    Used to populate the confirmation embed before execution.
+    Resolves IDs to names where the guild cache allows.
+    """
+    def _role(key: str) -> str:
+        val = args.get(key)
+        if val is None:
+            return "?"
+        if guild:
+            r = guild.get_role(int(val))
+            if r:
+                return f"@{r.name}"
+        return f"role {val}"
+
+    def _channel(key: str) -> str:
+        val = args.get(key)
+        if val is None:
+            return "?"
+        if guild:
+            ch = guild.get_channel(int(val))
+            if ch:
+                return f"#{ch.name}"
+        return f"channel {val}"
+
+    def _member(key: str) -> str:
+        val = args.get(key)
+        if val is None:
+            return "?"
+        if guild:
+            m = guild.get_member(int(val))
+            if m:
+                return m.display_name
+        return f"user {val}"
+
+    def _target(key: str) -> str:
+        """Resolve a target_id that could be either a role or a member."""
+        val = args.get(key)
+        if val is None:
+            return "?"
+        if guild:
+            r = guild.get_role(int(val))
+            if r:
+                return f"@{r.name}"
+            m = guild.get_member(int(val))
+            if m:
+                return m.display_name
+        return f"target {val}"
+
+    match tool_name:
+        case "assign_role":
+            return f"Assign {_role('role_id')} → {_member('user_id')}"
+        case "remove_role":
+            return f"Remove {_role('role_id')} from {_member('user_id')}"
+        case "set_channel_permission":
+            allow = ", ".join(args.get("allow", [])) or "none"
+            deny = ", ".join(args.get("deny", [])) or "none"
+            return (
+                f"Set overwrite on {_channel('channel_id')} for {_target('target_id')}\n"
+                f"  Allow: {allow}\n"
+                f"  Deny: {deny}"
+            )
+        case "clean_permissions":
+            policy = args.get("policy", "sync_to_category")
+            return f"Clean permissions on {_channel('channel_id')} — policy: `{policy}`"
+        case "create_role":
+            perms = ", ".join(args.get("permissions", [])) or "none"
+            return f"Create role **{args.get('name', '?')}** — permissions: {perms}"
+        case "delete_role":
+            return f"Delete {_role('role_id')}"
+        case "fix_bot_access":
+            return (
+                f"Fix bot access in {_channel('channel_id')} "
+                f"for bot: {args.get('bot_name_or_id', '?')}"
+            )
+        case _:
+            return f"`{tool_name}` with args: {args}"
+
 
 # ---------------------------------------------------------------------------
 # Dispatcher
@@ -357,5 +602,33 @@ async def dispatch(
             )
         case "bulk_permission_audit":
             return await bulk_permission_audit(_guild())
+        # Phase 3 — guarded write tools
+        case "assign_role":
+            return await assign_role(_guild(), int(args["user_id"]), int(args["role_id"]))
+        case "remove_role":
+            return await remove_role(_guild(), int(args["user_id"]), int(args["role_id"]))
+        case "set_channel_permission":
+            return await set_channel_permission(
+                _guild(),
+                channel_id=int(args["channel_id"]),
+                target_id=int(args["target_id"]),
+                allow=list(args.get("allow") or []),
+                deny=list(args.get("deny") or []),
+            )
+        case "create_role":
+            return await create_role(
+                _guild(),
+                name=args["name"],
+                permissions=list(args.get("permissions") or []),
+                color=args.get("color"),
+            )
+        case "delete_role":
+            return await delete_role(_guild(), int(args["role_id"]))
+        case "fix_bot_access":
+            return await fix_bot_access(
+                _guild(),
+                channel_id=int(args["channel_id"]),
+                bot_name_or_id=args["bot_name_or_id"],
+            )
         case _:
             raise ValueError(f"Unknown tool: {tool_name}")

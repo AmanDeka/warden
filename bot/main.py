@@ -76,7 +76,7 @@ async def ask_cmd(interaction: discord.Interaction, question: str):
         # We pass None as guild when invoked from a DM context.
         guild = interaction.guild
         answer = await orchestrator.run_from_slash(
-            question, interaction.user, guild, bot.user, status_msg
+            question, interaction.user, guild, bot.user, status_msg, bot
         )
         await interaction.followup.send(embed=answer_embed(answer))
     except Exception as exc:
@@ -263,7 +263,7 @@ async def on_message(message: discord.Message):
         guild = message.guild
         status_msg = await message.channel.send(embed=status_embed("🧠 Thinking..."))
         try:
-            answer = await orchestrator.run(message, guild, bot.user, status_msg)
+            answer = await orchestrator.run(message, guild, bot.user, status_msg, bot)
             await message.channel.send(embed=answer_embed(answer))
         except Exception as exc:
             await status_msg.edit(embed=status_embed(f"⚠️ Something went wrong: {exc}"))
