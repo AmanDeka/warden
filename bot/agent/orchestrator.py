@@ -37,7 +37,7 @@ async def _load_history(user_id: int) -> list[types.Content]:
             rows = await cursor.fetchall()
 
     return [
-        types.Content(role=row[0], parts=[types.Part.from_text(row[1])])
+        types.Content(role=row[0], parts=[types.Part(text=row[1])])
         for row in reversed(rows)
     ]
 
