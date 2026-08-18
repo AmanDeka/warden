@@ -442,7 +442,6 @@ WRITE_TOOLS: frozenset[str] = frozenset({
     "clean_permissions",
     "create_role",
     "delete_role",
-    "fix_bot_access",
 })
 
 

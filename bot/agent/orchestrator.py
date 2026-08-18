@@ -14,7 +14,7 @@ from bot.storage import db
 from bot.utils.formatting import status_embed
 from bot.utils.gemini import get_client
 
-MAX_ITERATIONS = 5
+MAX_ITERATIONS = 15
 MAX_HISTORY_TURNS = 20
 MODEL = "gemini-3.5-flash"
 
@@ -151,16 +151,27 @@ async def _run_loop(
 
         tool_response_parts: list[types.Part] = []
 
-        for fc in function_calls:
-            tool_name = fc.name
-            args = dict(fc.args)
+        # --- Resolve member once per loop iteration (needed for auth checks) ---
+        member = user
+        if not isinstance(member, discord.Member) and guild is not None:
+            try:
+                member = await guild.fetch_member(user.id)
+            except discord.NotFound:
+                member = None
 
-            # --- auth + confirmation gate for write tools ---
-            if tool_name in WRITE_TOOLS:
-                if not isinstance(user, discord.Member) or not await auth.is_allowed(user):
+        # --- Batch-confirm all write tools in this round with a single prompt ---
+        write_calls = [
+            fc for fc in function_calls if fc.name in WRITE_TOOLS
+        ]
+        batch_confirmed: bool | None = None  # None = not yet asked
+
+        if write_calls:
+            # Auth check — applies to the whole batch
+            if not isinstance(member, discord.Member) or not await auth.is_allowed(member):
+                for fc in write_calls:
                     tool_response_parts.append(
                         types.Part.from_function_response(
-                            name=tool_name,
+                            name=fc.name,
                             response={"error": (
                                 "Permission denied. Your roles are not on the "
                                 "permissions allowlist. Ask the server owner to run "
@@ -168,21 +179,38 @@ async def _run_loop(
                             )},
                         )
                     )
-                    await status_msg.edit(embed=status_embed("🚫 Not authorised for write tools"))
-                    continue
+                await status_msg.edit(embed=status_embed("🚫 Not authorised for write tools"))
+                # Skip to sending tool_response_parts (which now contain all denials)
+                response = await chat.send_message(tool_response_parts)
+                continue
 
-                diff = describe_write_action(tool_name, args, guild)
-                confirmed = await confirmation.request_confirmation(
-                    status_msg, diff, user, bot_client
-                )
-                if not confirmed:
+            # Build a combined diff for all write calls in this round
+            diffs = []
+            for fc in write_calls:
+                diffs.append(describe_write_action(fc.name, dict(fc.args), guild))
+            combined_diff = "\n".join(f"{i+1}. {d}" for i, d in enumerate(diffs))
+
+            batch_confirmed = await confirmation.request_confirmation(
+                status_msg, combined_diff, user, bot_client
+            )
+            if not batch_confirmed:
+                for fc in write_calls:
                     tool_response_parts.append(
                         types.Part.from_function_response(
-                            name=tool_name,
+                            name=fc.name,
                             response={"cancelled": "The user cancelled this action."},
                         )
                     )
-                    continue
+                response = await chat.send_message(tool_response_parts)
+                continue
+
+        for fc in function_calls:
+            tool_name = fc.name
+            args = dict(fc.args)
+
+            # Write tools that were cancelled in the batch step — skip execution
+            if tool_name in WRITE_TOOLS and batch_confirmed is False:
+                continue
 
             # --- execute ---
             await status_msg.edit(embed=status_embed(f"🔧 `{tool_name}`..."))
