@@ -8,7 +8,7 @@ import discord
 from google.genai import types
 
 from bot.agent.system_prompt import SYSTEM_PROMPT
-from bot.agent.tool_schemas import TOOL_SCHEMAS, WRITE_TOOLS, describe_write_action, dispatch
+from bot.agent.tool_schemas import TOOL_LABELS, TOOL_SCHEMAS, WRITE_TOOLS, describe_write_action, dispatch
 from bot.guardrails import auth, confirmation
 from bot.storage import db
 from bot.utils.formatting import status_embed
@@ -138,7 +138,12 @@ async def _run_loop(
     Handles write-tool auth checks and the ✅/❌ confirmation flow.
     Saves the completed turn to conversation history and logs every tool call.
     """
-    await status_msg.edit(embed=status_embed("🧠 Thinking..."))
+    log: list[str] = ["🧠 Thinking..."]
+
+    async def update_status() -> None:
+        await status_msg.edit(embed=status_embed("\n".join(log)))
+
+    await update_status()
     first_message = f"[Server context]\n{_build_context(guild, user)}\n\n{user_text}"
     response = await chat.send_message(first_message)
 
@@ -179,8 +184,8 @@ async def _run_loop(
                             )},
                         )
                     )
-                await status_msg.edit(embed=status_embed("🚫 Not authorised for write tools"))
-                # Skip to sending tool_response_parts (which now contain all denials)
+                log.append("🚫 Not authorised for write tools")
+                await update_status()
                 response = await chat.send_message(tool_response_parts)
                 continue
 
@@ -213,7 +218,9 @@ async def _run_loop(
                 continue
 
             # --- execute ---
-            await status_msg.edit(embed=status_embed(f"🔧 `{tool_name}`..."))
+            label = TOOL_LABELS.get(tool_name, tool_name)
+            log.append(f"🔧 {label}...")
+            await update_status()
             try:
                 result = await dispatch(tool_name, args, guild=guild)
                 await _log_tool_call(user.id, tool_name, args, result)
@@ -223,7 +230,8 @@ async def _run_loop(
                         response={"result": result},
                     )
                 )
-                await status_msg.edit(embed=status_embed(f"✅ `{tool_name}` done"))
+                log[-1] = f"✅ {label}"
+                await update_status()
             except Exception as exc:
                 tool_response_parts.append(
                     types.Part.from_function_response(
@@ -231,7 +239,8 @@ async def _run_loop(
                         response={"error": str(exc)},
                     )
                 )
-                await status_msg.edit(embed=status_embed(f"⚠️ `{tool_name}` failed: {exc}"))
+                log[-1] = f"⚠️ {label}: {exc}"
+                await update_status()
 
         response = await chat.send_message(tool_response_parts)
 

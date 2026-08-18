@@ -435,6 +435,25 @@ TOOL_SCHEMAS: list[types.Tool] = [TOOLS]
 # Write-tool registry
 # ---------------------------------------------------------------------------
 
+TOOL_LABELS: dict[str, str] = {
+    "search_messages":          "Searching messages",
+    "find_message_by_context":  "Finding message by description",
+    "summarize_channel":        "Fetching messages to summarize",
+    "find_media":               "Searching for media",
+    "list_permissions":         "Checking permissions",
+    "list_roles":               "Listing roles",
+    "get_member_roles":         "Getting member's roles",
+    "get_audit_log":            "Reading audit log",
+    "bulk_permission_audit":    "Scanning all channels for permission issues",
+    "assign_role":              "Assigning role",
+    "remove_role":              "Removing role",
+    "set_channel_permission":   "Setting channel permission",
+    "clean_permissions":        "Cleaning permissions",
+    "create_role":              "Creating role",
+    "delete_role":              "Deleting role",
+    "fix_bot_access":           "Diagnosing bot access",
+}
+
 WRITE_TOOLS: frozenset[str] = frozenset({
     "assign_role",
     "remove_role",
