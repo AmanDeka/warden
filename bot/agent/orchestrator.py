@@ -16,7 +16,7 @@ from bot.utils.gemini import get_client
 
 MAX_ITERATIONS = 15
 MAX_HISTORY_TURNS = 20
-MODEL = "gemini-3.5-flash"
+MODEL = "gemini-3.5-flash-lite"
 
 GUILD_ID = int(os.environ["GUILD_ID"])
 
