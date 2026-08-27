@@ -19,6 +19,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
+markers = ["llm: tests that hit the real Gemini API (require GEMINI_API_KEY)"]
 asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
