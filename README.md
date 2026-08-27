@@ -205,6 +205,24 @@ Permanently deletes a role. Refuses to delete integration-managed roles.
 
 Diagnoses why another bot can't operate in a channel. Resolves the bot by display name or user ID, walks the full permission stack (server roles → category overwrite → channel overwrite), and identifies which required permissions are missing and why. Returns a ready-to-use `set_channel_permission` call as the proposed fix — does not apply it automatically.
 
+#### `manage_server(action, ...)`
+
+Unified moderation and channel management tool. Choose an action and supply the relevant arguments:
+
+| Action | Required | Optional |
+|---|---|---|
+| `kick` | `user_id` | `reason` |
+| `ban` | `user_id` | `reason`, `delete_message_days` (0–7, default 0) |
+| `unban` | `user_id` | `reason` |
+| `timeout` | `user_id`, `duration_minutes` | `reason` |
+| `remove_timeout` | `user_id` | `reason` |
+| `create_channel` | `new_name` | `channel_type` (text/voice/forum), `category_id`, `reason` |
+| `delete_channel` | `channel_id` | `reason` |
+| `rename_channel` | `channel_id`, `new_name` | `reason` |
+| `move_member` | `user_id`, `voice_channel_id` | — |
+
+All actions require confirmation and the requesting user must be on the permissions allowlist.
+
 #### `scan_bots()`
 
 Lists all bots in the server with their roles and flags any holding dangerous permissions (`administrator`, `manage_roles`, `ban_members`, `kick_members`, `manage_guild`, etc.). Useful for auditing over-privileged integrations. Read-only — no confirmation required.
@@ -338,7 +356,8 @@ warden/
 │   │   ├── media.py          # find_media
 │   │   ├── summarize.py      # summarize_channel
 │   │   ├── permissions.py    # list_permissions, list_roles, get_member_roles, scan_bots
-│   │   ├── reminders.py      # set_reminder, set_birthday, list_reminders, delete_reminder
+│   │   ├── moderation.py     # manage_server (kick, ban, timeout, channels, move)
+│   │   ├── reminders.py      # set_reminder, list_reminders, delete_reminder
 │   │   └── audit.py          # get_audit_log, bulk_permission_audit
 │   ├── indexer/
 │   │   ├── listener.py       # real-time message index + embedding generation
