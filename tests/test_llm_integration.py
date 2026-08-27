@@ -345,3 +345,87 @@ async def test_fix_bot_access_selected():
     assert fc is not None
     assert fc.name == "fix_bot_access"
     assert fc.args.get("channel_id") == "333333333333333333"
+
+
+# ---------------------------------------------------------------------------
+# manage_server — moderation actions
+# ---------------------------------------------------------------------------
+
+async def test_kick_selected():
+    fc = await _first_tool(f"Kick user id {_USER_ID} for spamming")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "kick"
+    assert fc.args.get("user_id") == _USER_ID
+
+
+async def test_kick_reason_populated():
+    fc = await _first_tool(f"Kick user id {_USER_ID} for spamming")
+    assert fc is not None
+    assert "spam" in fc.args.get("reason", "").lower()
+
+
+async def test_ban_selected():
+    fc = await _first_tool(f"Ban user id {_USER_ID} for repeated violations")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "ban"
+    assert fc.args.get("user_id") == _USER_ID
+
+
+async def test_unban_selected():
+    fc = await _first_tool(f"Unban user id {_USER_ID}")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "unban"
+    assert fc.args.get("user_id") == _USER_ID
+
+
+async def test_timeout_selected():
+    fc = await _first_tool(f"Timeout user id {_USER_ID} for 30 minutes")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "timeout"
+    assert fc.args.get("user_id") == _USER_ID
+    assert int(fc.args.get("duration_minutes", 0)) == 30
+
+
+async def test_remove_timeout_selected():
+    fc = await _first_tool(f"Remove the timeout from user id {_USER_ID}")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "remove_timeout"
+    assert fc.args.get("user_id") == _USER_ID
+
+
+async def test_create_channel_selected():
+    fc = await _first_tool("Create a new text channel called dev-chat")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "create_channel"
+    assert "dev" in fc.args.get("new_name", "").lower()
+
+
+async def test_create_voice_channel_type():
+    fc = await _first_tool("Create a new voice channel called Gaming")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "create_channel"
+    assert fc.args.get("channel_type") == "voice"
+
+
+async def test_delete_channel_selected():
+    fc = await _first_tool("Delete the #general channel")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "delete_channel"
+    assert fc.args.get("channel_id") == "333333333333333333"
+
+
+async def test_rename_channel_selected():
+    fc = await _first_tool("Rename #general to general-chat")
+    assert fc is not None
+    assert fc.name == "manage_server"
+    assert fc.args.get("action") == "rename_channel"
+    assert fc.args.get("channel_id") == "333333333333333333"
+    assert "general-chat" in fc.args.get("new_name", "").lower()
