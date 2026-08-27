@@ -28,7 +28,8 @@ from bot.tools.permissions import (
     scan_bots,
     set_channel_permission,
 )
-from bot.tools.reminders import delete_reminder, list_reminders, set_birthday, set_reminder
+from bot.tools.moderation import ACTIONS as _MODERATION_ACTIONS, manage_server
+from bot.tools.reminders import delete_reminder, list_reminders, set_reminder
 from bot.tools.search import find_message_by_context, search_messages
 from bot.tools.summarize import summarize_channel
 
@@ -380,14 +381,62 @@ _delete_role = types.FunctionDeclaration(
 )
 
 # ---------------------------------------------------------------------------
+# manage_server
+# ---------------------------------------------------------------------------
+
+_manage_server = types.FunctionDeclaration(
+    name="manage_server",
+    description=(
+        "Unified moderation and channel management tool. "
+        "Choose an action and supply the relevant arguments for it:\n"
+        "- kick: user_id, reason?\n"
+        "- ban: user_id, reason?, delete_message_days?\n"
+        "- unban: user_id, reason?\n"
+        "- timeout: user_id, duration_minutes, reason?\n"
+        "- remove_timeout: user_id, reason?\n"
+        "- create_channel: new_name, channel_type? (text/voice/forum), category_id?\n"
+        "- delete_channel: channel_id, reason?\n"
+        "- rename_channel: channel_id, new_name\n"
+        "- move_member: user_id, voice_channel_id\n"
+        "All actions require confirmation and the user must be on the permissions allowlist."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "action": types.Schema(
+                type=types.Type.STRING,
+                enum=list(_MODERATION_ACTIONS.keys()),
+                description="The action to perform.",
+            ),
+            "user_id": types.Schema(type=types.Type.STRING, description="Target member's Discord user ID."),
+            "channel_id": types.Schema(type=types.Type.STRING, description="Target channel ID (for channel actions)."),
+            "voice_channel_id": types.Schema(type=types.Type.STRING, description="Destination voice channel ID (for move_member)."),
+            "new_name": types.Schema(type=types.Type.STRING, description="Channel name (for create_channel or rename_channel)."),
+            "channel_type": types.Schema(
+                type=types.Type.STRING,
+                enum=["text", "voice", "forum"],
+                description="Channel type for create_channel. Defaults to 'text'.",
+            ),
+            "category_id": types.Schema(type=types.Type.STRING, description="Category channel ID to place a new channel under."),
+            "reason": types.Schema(type=types.Type.STRING, description="Optional audit log reason."),
+            "duration_minutes": types.Schema(type=types.Type.INTEGER, description="Timeout duration in minutes (for timeout action)."),
+            "delete_message_days": types.Schema(type=types.Type.INTEGER, description="Days of messages to delete on ban (0–7). Defaults to 0."),
+        },
+        required=["action"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # set_reminder
 # ---------------------------------------------------------------------------
 
 _set_reminder = types.FunctionDeclaration(
     name="set_reminder",
     description=(
-        "Create a reminder that will ping a user at a specific date and time. "
-        "Use this when someone asks to be reminded about something later. "
+        "Create a reminder or birthday reminder that will ping a user at a future date. "
+        "For general reminders: provide remind_at as an ISO 8601 UTC datetime. "
+        "For birthdays: set category='birthday', provide birthday_month and birthday_day, "
+        "set tag to the person's name, and omit remind_at (it is calculated automatically). "
         "Supply created_by and target_user_id from the requesting user's ID in the server context. "
         "Supply channel_id as the channel the user is currently speaking in."
     ),
@@ -397,40 +446,23 @@ _set_reminder = types.FunctionDeclaration(
             "created_by": types.Schema(type=types.Type.STRING, description="User ID of the person setting the reminder."),
             "target_user_id": types.Schema(type=types.Type.STRING, description="User ID to ping when the reminder fires. Usually the same as created_by."),
             "message": types.Schema(type=types.Type.STRING, description="The reminder text to deliver."),
-            "remind_at": types.Schema(type=types.Type.STRING, description="ISO 8601 UTC datetime when the reminder should fire (e.g. '2026-09-01T09:00:00Z')."),
             "channel_id": types.Schema(type=types.Type.STRING, description="Channel ID where the reminder will be posted."),
+            "remind_at": types.Schema(type=types.Type.STRING, description="ISO 8601 UTC datetime when the reminder fires (e.g. '2026-09-01T09:00:00Z'). Required for general reminders; omit for birthdays."),
             "repeat": types.Schema(
                 type=types.Type.STRING,
                 enum=["daily", "weekly", "monthly", "yearly"],
-                description="Optional repeat interval. Omit for a one-time reminder.",
+                description="Optional repeat interval. Omit for a one-time reminder. Defaults to 'yearly' when category='birthday'.",
             ),
+            "category": types.Schema(
+                type=types.Type.STRING,
+                enum=["general", "birthday"],
+                description="'birthday' for yearly birthday reminders, 'general' (default) for everything else.",
+            ),
+            "tag": types.Schema(type=types.Type.STRING, description="For birthdays: the person's name. Used as a label in reminder listings."),
+            "birthday_month": types.Schema(type=types.Type.INTEGER, description="Birth month (1–12). Required when category='birthday'."),
+            "birthday_day": types.Schema(type=types.Type.INTEGER, description="Birth day (1–31). Required when category='birthday'."),
         },
-        required=["created_by", "target_user_id", "message", "remind_at", "channel_id"],
-    ),
-)
-
-# ---------------------------------------------------------------------------
-# set_birthday
-# ---------------------------------------------------------------------------
-
-_set_birthday = types.FunctionDeclaration(
-    name="set_birthday",
-    description=(
-        "Register a yearly birthday reminder for a person. "
-        "Will post a birthday message every year on that date. "
-        "Use this when someone mentions a birthday they want the bot to remember."
-    ),
-    parameters=types.Schema(
-        type=types.Type.OBJECT,
-        properties={
-            "created_by": types.Schema(type=types.Type.STRING, description="User ID of the person registering the birthday."),
-            "person_name": types.Schema(type=types.Type.STRING, description="Name of the birthday person."),
-            "month": types.Schema(type=types.Type.INTEGER, description="Birth month (1–12)."),
-            "day": types.Schema(type=types.Type.INTEGER, description="Birth day (1–31)."),
-            "channel_id": types.Schema(type=types.Type.STRING, description="Channel ID where the birthday message will be posted."),
-            "person_user_id": types.Schema(type=types.Type.STRING, description="Optional Discord user ID of the birthday person, to ping them directly."),
-        },
-        required=["created_by", "person_name", "month", "day", "channel_id"],
+        required=["created_by", "target_user_id", "message", "channel_id"],
     ),
 )
 
@@ -526,9 +558,10 @@ TOOLS = types.Tool(
         _get_member_roles,
         _get_audit_log,
         _bulk_permission_audit,
+        # Moderation & channel management
+        _manage_server,
         # Reminders & birthdays
         _set_reminder,
-        _set_birthday,
         _list_reminders,
         _delete_reminder,
         # Phase 2.5 — bot scanner
@@ -560,8 +593,8 @@ TOOL_LABELS: dict[str, str] = {
     "get_audit_log":            "Reading audit log",
     "bulk_permission_audit":    "Scanning all channels for permission issues",
     "scan_bots":                "Scanning bots in the server",
+    "manage_server":            "Server action",
     "set_reminder":             "Setting reminder",
-    "set_birthday":             "Registering birthday reminder",
     "list_reminders":           "Listing reminders",
     "delete_reminder":          "Cancelling reminder",
     "assign_role":              "Assigning role",
@@ -580,6 +613,7 @@ WRITE_TOOLS: frozenset[str] = frozenset({
     "clean_permissions",
     "create_role",
     "delete_role",
+    "manage_server",
 })
 
 
@@ -659,6 +693,36 @@ def describe_write_action(tool_name: str, args: dict, guild: discord.Guild | Non
                 f"Fix bot access in {_channel('channel_id')} "
                 f"for bot: {args.get('bot_name_or_id', '?')}"
             )
+        case "manage_server":
+            action = args.get("action", "?")
+            reason = args.get("reason")
+            suffix = f" — reason: {reason}" if reason else ""
+            match action:
+                case "kick":
+                    return f"Kick {_member('user_id')}{suffix}"
+                case "ban":
+                    days = args.get("delete_message_days", 0)
+                    return f"Ban {_member('user_id')} (delete {days}d of messages){suffix}"
+                case "unban":
+                    return f"Unban user {args.get('user_id', '?')}{suffix}"
+                case "timeout":
+                    mins = args.get("duration_minutes", "?")
+                    return f"Timeout {_member('user_id')} for {mins} minutes{suffix}"
+                case "remove_timeout":
+                    return f"Remove timeout from {_member('user_id')}{suffix}"
+                case "create_channel":
+                    ctype = args.get("channel_type", "text")
+                    return f"Create {ctype} channel **#{args.get('new_name', '?')}**{suffix}"
+                case "delete_channel":
+                    return f"Delete {_channel('channel_id')}{suffix}"
+                case "rename_channel":
+                    return f"Rename {_channel('channel_id')} → **#{args.get('new_name', '?')}**{suffix}"
+                case "move_member":
+                    vc_id = args.get("voice_channel_id")
+                    vc_label = f"<#{vc_id}>" if vc_id else "?"
+                    return f"Move {_member('user_id')} to voice channel {vc_label}{suffix}"
+                case _:
+                    return f"manage_server action={action} args={args}"
         case _:
             return f"`{tool_name}` with args: {args}"
 
@@ -748,19 +812,13 @@ async def dispatch(
                 created_by=int(args["created_by"]),
                 target_user_id=int(args["target_user_id"]),
                 message=args["message"],
+                channel_id=int(args["channel_id"]),
                 remind_at=_dt("remind_at"),
-                channel_id=int(args["channel_id"]),
                 repeat=args.get("repeat"),
-            )
-        case "set_birthday":
-            return await set_birthday(
-                guild_id=_guild().id,
-                created_by=int(args["created_by"]),
-                person_name=args["person_name"],
-                month=int(args["month"]),
-                day=int(args["day"]),
-                channel_id=int(args["channel_id"]),
-                person_user_id=_int("person_user_id"),
+                category=args.get("category", "general"),
+                tag=args.get("tag"),
+                birthday_month=_int("birthday_month"),
+                birthday_day=_int("birthday_day"),
             )
         case "list_reminders":
             return await list_reminders(guild_id=_guild().id, user_id=int(args["user_id"]))
@@ -768,6 +826,21 @@ async def dispatch(
             return await delete_reminder(
                 reminder_id=int(args["reminder_id"]),
                 user_id=int(args["user_id"]),
+            )
+        # Moderation & channel management
+        case "manage_server":
+            return await manage_server(
+                _guild(),
+                action=args["action"],
+                user_id=_int("user_id"),
+                reason=args.get("reason"),
+                delete_message_days=int(args.get("delete_message_days") or 0),
+                duration_minutes=_int("duration_minutes"),
+                channel_id=_int("channel_id"),
+                new_name=args.get("new_name"),
+                channel_type=args.get("channel_type", "text"),
+                category_id=_int("category_id"),
+                voice_channel_id=_int("voice_channel_id"),
             )
         # Phase 3 — guarded write tools
         case "assign_role":
