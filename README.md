@@ -374,9 +374,42 @@ warden/
 │       ├── pagination.py     # chunked Discord history fetch helpers
 │       └── formatting.py     # status embed, final-answer embed, diff rendering
 └── tests/
-    ├── test_tools_permissions.py
-    ├── test_tools_search.py
-    └── test_orchestrator.py
+    ├── conftest.py               # shared fixtures (tmp_db, env setup)
+    ├── test_tools_permissions.py # permission + scan_bots tool unit tests
+    ├── test_tools_search.py      # FTS search + helper unit tests
+    ├── test_tools_reminders.py   # reminder CRUD + scheduler logic unit tests
+    ├── test_orchestrator.py      # _strip_mention, _build_context unit tests
+    ├── test_tool_schemas.py      # describe_write_action unit tests
+    ├── test_guardrails.py        # auth allowlist unit tests
+    └── test_llm_integration.py  # end-to-end: real Gemini API, verifies tool selection
+```
+
+---
+
+## Testing
+
+### Unit tests (no API calls)
+
+```bash
+uv run pytest -m "not llm" -v
+```
+
+82 tests covering tool logic, search backends, reminder CRUD, orchestrator helpers, write-action descriptions, and auth — all using an isolated in-memory SQLite DB via the `tmp_db` fixture. Discord objects are mocked; no real bot token or API key required.
+
+### LLM integration tests (real Gemini API)
+
+```bash
+uv run pytest -m llm -v
+```
+
+32 tests that send natural-language prompts to the real Gemini API and assert that the correct tool was selected with the correct arguments extracted (channel IDs resolved from names, dates parsed, repeat intervals set, etc.). Requires `GEMINI_API_KEY` in `.env`. Tests are skipped automatically if the key is absent or set to the placeholder value.
+
+A 4-second pause is added between each test to stay within the free-tier rate limit of 15 requests/minute. Full suite takes ~3.5 minutes.
+
+### Run everything
+
+```bash
+uv run pytest -v
 ```
 
 ---
