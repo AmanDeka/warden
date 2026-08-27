@@ -94,6 +94,31 @@ async def set_reminder(
     }
 
 
+async def set_birthday(
+    guild_id: int,
+    created_by: int,
+    person_name: str,
+    month: int,
+    day: int,
+    channel_id: int,
+    person_user_id: int | None = None,
+) -> dict:
+    """Register a yearly birthday reminder. Wrapper over set_reminder."""
+    ping_id = person_user_id if person_user_id is not None else created_by
+    message = f"🎂 Today is **{person_name}**'s birthday! Wishing them a wonderful day! 🎉"
+    return await set_reminder(
+        guild_id=guild_id,
+        created_by=created_by,
+        target_user_id=ping_id,
+        message=message,
+        channel_id=channel_id,
+        category="birthday",
+        tag=person_name,
+        birthday_month=month,
+        birthday_day=day,
+    )
+
+
 async def list_reminders(guild_id: int, user_id: int) -> dict:
     """List all active reminders created by this user."""
     async with connect() as conn:
