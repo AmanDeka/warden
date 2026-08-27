@@ -8,6 +8,7 @@ Skipped automatically when GEMINI_API_KEY is not set or is the test placeholder.
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 from dotenv import load_dotenv
@@ -31,6 +32,12 @@ pytestmark = [
     pytest.mark.llm,
     pytest.mark.skipif(not _REAL_KEY, reason="Real GEMINI_API_KEY not available"),
 ]
+
+
+@pytest.fixture(autouse=True)
+async def _rate_limit_pause():
+    """4-second pause between tests — keeps API calls under the 15 req/min free tier limit."""
+    await asyncio.sleep(4)
 
 # ---------------------------------------------------------------------------
 # Fake server context (mirrors what _build_context produces in production)
@@ -271,24 +278,28 @@ async def test_set_birthday_selected():
         "Remember that Alex's birthday is on March 14. Post the reminder in #birthday"
     )
     assert fc is not None
-    assert fc.name == "set_birthday"
+    assert fc.name == "set_reminder"
+    assert fc.args.get("category") == "birthday"
 
 
 async def test_set_birthday_name_populated():
+    # Person's name goes into the `tag` field on set_reminder
     fc = await _first_tool(
         "Remember that Alex's birthday is on March 14. Post the reminder in #birthday"
     )
     assert fc is not None
-    assert "alex" in fc.args.get("person_name", "").lower()
+    name_field = (fc.args.get("tag", "") + fc.args.get("message", "")).lower()
+    assert "alex" in name_field
 
 
 async def test_set_birthday_date_populated():
+    # Birthday date goes into birthday_month / birthday_day on set_reminder
     fc = await _first_tool(
         "Remember that Alex's birthday is on March 14. Post the reminder in #birthday"
     )
     assert fc is not None
-    assert int(fc.args.get("month", 0)) == 3
-    assert int(fc.args.get("day", 0)) == 14
+    assert int(fc.args.get("birthday_month", 0)) == 3
+    assert int(fc.args.get("birthday_day", 0)) == 14
 
 
 async def test_set_birthday_channel_resolved():
