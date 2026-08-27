@@ -296,6 +296,48 @@ async def delete_role(guild: discord.Guild, role_id: int) -> dict:
         return {"error": f"Discord API error: {exc}"}
 
 
+_DANGEROUS_PERMS = [
+    "administrator",
+    "manage_guild",
+    "manage_roles",
+    "manage_channels",
+    "ban_members",
+    "kick_members",
+    "manage_webhooks",
+    "manage_expressions",
+    "manage_messages",
+    "mention_everyone",
+]
+
+
+async def scan_bots(guild: discord.Guild) -> dict:
+    """List all bots in the guild with their roles and flagged dangerous permissions."""
+    bots = [m for m in guild.members if m.bot]
+
+    entries = []
+    for bot in sorted(bots, key=lambda m: m.display_name.lower()):
+        roles = [r for r in bot.roles if not r.is_default()]
+        effective = bot.guild_permissions
+        dangerous = [p for p in _DANGEROUS_PERMS if getattr(effective, p, False)]
+        entries.append({
+            "name": bot.display_name,
+            "id": str(bot.id),
+            "joined_at": bot.joined_at.isoformat() if bot.joined_at else None,
+            "roles": [
+                {"name": r.name, "id": str(r.id), "position": r.position}
+                for r in sorted(roles, key=lambda r: r.position, reverse=True)
+            ],
+            "dangerous_permissions": dangerous,
+            "has_administrator": effective.administrator,
+        })
+
+    return {
+        "bot_count": len(bots),
+        "bots": entries,
+        "flagged": [b for b in entries if b["dangerous_permissions"]],
+    }
+
+
 async def fix_bot_access(
     guild: discord.Guild,
     channel_id: int,

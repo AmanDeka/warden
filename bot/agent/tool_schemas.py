@@ -25,8 +25,10 @@ from bot.tools.permissions import (
     list_permissions,
     list_roles,
     remove_role,
+    scan_bots,
     set_channel_permission,
 )
+from bot.tools.reminders import delete_reminder, list_reminders, set_birthday, set_reminder
 from bot.tools.search import find_message_by_context, search_messages
 from bot.tools.summarize import summarize_channel
 
@@ -378,6 +380,111 @@ _delete_role = types.FunctionDeclaration(
 )
 
 # ---------------------------------------------------------------------------
+# set_reminder
+# ---------------------------------------------------------------------------
+
+_set_reminder = types.FunctionDeclaration(
+    name="set_reminder",
+    description=(
+        "Create a reminder that will ping a user at a specific date and time. "
+        "Use this when someone asks to be reminded about something later. "
+        "Supply created_by and target_user_id from the requesting user's ID in the server context. "
+        "Supply channel_id as the channel the user is currently speaking in."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "created_by": types.Schema(type=types.Type.STRING, description="User ID of the person setting the reminder."),
+            "target_user_id": types.Schema(type=types.Type.STRING, description="User ID to ping when the reminder fires. Usually the same as created_by."),
+            "message": types.Schema(type=types.Type.STRING, description="The reminder text to deliver."),
+            "remind_at": types.Schema(type=types.Type.STRING, description="ISO 8601 UTC datetime when the reminder should fire (e.g. '2026-09-01T09:00:00Z')."),
+            "channel_id": types.Schema(type=types.Type.STRING, description="Channel ID where the reminder will be posted."),
+            "repeat": types.Schema(
+                type=types.Type.STRING,
+                enum=["daily", "weekly", "monthly", "yearly"],
+                description="Optional repeat interval. Omit for a one-time reminder.",
+            ),
+        },
+        required=["created_by", "target_user_id", "message", "remind_at", "channel_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# set_birthday
+# ---------------------------------------------------------------------------
+
+_set_birthday = types.FunctionDeclaration(
+    name="set_birthday",
+    description=(
+        "Register a yearly birthday reminder for a person. "
+        "Will post a birthday message every year on that date. "
+        "Use this when someone mentions a birthday they want the bot to remember."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "created_by": types.Schema(type=types.Type.STRING, description="User ID of the person registering the birthday."),
+            "person_name": types.Schema(type=types.Type.STRING, description="Name of the birthday person."),
+            "month": types.Schema(type=types.Type.INTEGER, description="Birth month (1–12)."),
+            "day": types.Schema(type=types.Type.INTEGER, description="Birth day (1–31)."),
+            "channel_id": types.Schema(type=types.Type.STRING, description="Channel ID where the birthday message will be posted."),
+            "person_user_id": types.Schema(type=types.Type.STRING, description="Optional Discord user ID of the birthday person, to ping them directly."),
+        },
+        required=["created_by", "person_name", "month", "day", "channel_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# list_reminders
+# ---------------------------------------------------------------------------
+
+_list_reminders = types.FunctionDeclaration(
+    name="list_reminders",
+    description="List all active reminders (including birthdays) created by a user.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "user_id": types.Schema(type=types.Type.STRING, description="Discord user ID whose reminders to list."),
+        },
+        required=["user_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# delete_reminder
+# ---------------------------------------------------------------------------
+
+_delete_reminder = types.FunctionDeclaration(
+    name="delete_reminder",
+    description="Cancel an active reminder by its ID. Only the creator can cancel it.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "reminder_id": types.Schema(type=types.Type.INTEGER, description="The numeric ID of the reminder to cancel."),
+            "user_id": types.Schema(type=types.Type.STRING, description="User ID of the requester (must be the reminder's creator)."),
+        },
+        required=["reminder_id", "user_id"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# scan_bots
+# ---------------------------------------------------------------------------
+
+_scan_bots = types.FunctionDeclaration(
+    name="scan_bots",
+    description=(
+        "List all bots in the server with their roles and any dangerous permissions they hold "
+        "(administrator, manage_roles, ban_members, etc.). "
+        "Use this to audit which bots are present and whether any are over-privileged."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={},
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # fix_bot_access
 # ---------------------------------------------------------------------------
 
@@ -419,6 +526,13 @@ TOOLS = types.Tool(
         _get_member_roles,
         _get_audit_log,
         _bulk_permission_audit,
+        # Reminders & birthdays
+        _set_reminder,
+        _set_birthday,
+        _list_reminders,
+        _delete_reminder,
+        # Phase 2.5 — bot scanner
+        _scan_bots,
         # Phase 3 — guarded write tools
         _assign_role,
         _remove_role,
@@ -445,6 +559,11 @@ TOOL_LABELS: dict[str, str] = {
     "get_member_roles":         "Getting member's roles",
     "get_audit_log":            "Reading audit log",
     "bulk_permission_audit":    "Scanning all channels for permission issues",
+    "scan_bots":                "Scanning bots in the server",
+    "set_reminder":             "Setting reminder",
+    "set_birthday":             "Registering birthday reminder",
+    "list_reminders":           "Listing reminders",
+    "delete_reminder":          "Cancelling reminder",
     "assign_role":              "Assigning role",
     "remove_role":              "Removing role",
     "set_channel_permission":   "Setting channel permission",
@@ -620,6 +739,36 @@ async def dispatch(
             )
         case "bulk_permission_audit":
             return await bulk_permission_audit(_guild())
+        case "scan_bots":
+            return await scan_bots(_guild())
+        # Reminders & birthdays
+        case "set_reminder":
+            return await set_reminder(
+                guild_id=_guild().id,
+                created_by=int(args["created_by"]),
+                target_user_id=int(args["target_user_id"]),
+                message=args["message"],
+                remind_at=_dt("remind_at"),
+                channel_id=int(args["channel_id"]),
+                repeat=args.get("repeat"),
+            )
+        case "set_birthday":
+            return await set_birthday(
+                guild_id=_guild().id,
+                created_by=int(args["created_by"]),
+                person_name=args["person_name"],
+                month=int(args["month"]),
+                day=int(args["day"]),
+                channel_id=int(args["channel_id"]),
+                person_user_id=_int("person_user_id"),
+            )
+        case "list_reminders":
+            return await list_reminders(guild_id=_guild().id, user_id=int(args["user_id"]))
+        case "delete_reminder":
+            return await delete_reminder(
+                reminder_id=int(args["reminder_id"]),
+                user_id=int(args["user_id"]),
+            )
         # Phase 3 — guarded write tools
         case "assign_role":
             return await assign_role(_guild(), int(args["user_id"]), int(args["role_id"]))

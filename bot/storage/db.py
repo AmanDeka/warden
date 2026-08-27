@@ -84,6 +84,23 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 """
 
+CREATE_REMINDERS = """
+CREATE TABLE IF NOT EXISTS reminders (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       INTEGER NOT NULL,
+    created_by     INTEGER NOT NULL,
+    target_user_id INTEGER NOT NULL,
+    message        TEXT NOT NULL,
+    remind_at      TEXT NOT NULL,      -- ISO 8601 UTC datetime of next trigger
+    channel_id     INTEGER NOT NULL,
+    repeat         TEXT,               -- NULL | 'daily' | 'weekly' | 'monthly' | 'yearly'
+    category       TEXT NOT NULL DEFAULT 'general',  -- 'general' | 'birthday'
+    tag            TEXT,               -- for birthdays: the person's name
+    created_at     TEXT NOT NULL,
+    active         INTEGER NOT NULL DEFAULT 1
+);
+"""
+
 DEFAULTS: dict[str, str] = {
     "search_method": "fts",  # 'fts' | 'semantic'
 }
@@ -99,6 +116,7 @@ async def init() -> None:
         await conn.execute(CREATE_INDEXED_CHANNELS)
         await conn.execute(CREATE_MESSAGE_EMBEDDINGS)
         await conn.execute(CREATE_SETTINGS)
+        await conn.execute(CREATE_REMINDERS)
         for key, value in DEFAULTS.items():
             await conn.execute(
                 "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",

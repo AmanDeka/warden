@@ -12,6 +12,7 @@ load_dotenv()
 from bot.agent import orchestrator
 from bot.guardrails import auth
 from bot.indexer import backfill, listener
+from bot.reminders import scheduler as reminder_scheduler
 from bot.storage import db
 from bot.utils.formatting import answer_embed, status_embed
 
@@ -33,6 +34,8 @@ async def on_ready():
     guild_obj = discord.Object(id=GUILD_ID)
     await bot.tree.sync(guild=guild_obj)
     print(f"Warden online as {bot.user} (guild {GUILD_ID})")
+
+    reminder_scheduler.start(bot)
 
     guild = bot.get_guild(GUILD_ID)
     if guild is not None:

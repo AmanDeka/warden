@@ -47,3 +47,19 @@ class PermissionAllowlist:
     guild_id: int
     added_by: int
     added_at: datetime
+
+
+@dataclass
+class Reminder:
+    id: int | None
+    guild_id: int
+    created_by: int
+    target_user_id: int
+    message: str
+    remind_at: datetime
+    channel_id: int
+    repeat: str | None      # None | 'daily' | 'weekly' | 'monthly' | 'yearly'
+    category: str           # 'general' | 'birthday'
+    tag: str | None         # birthday person's name for category='birthday'
+    created_at: datetime
+    active: bool
