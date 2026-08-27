@@ -21,6 +21,7 @@ from bot.tools.permissions import (
     create_role,
     delete_role,
     fix_bot_access,
+    get_bot_commands,
     get_member_roles,
     list_permissions,
     list_roles,
@@ -517,6 +518,32 @@ _scan_bots = types.FunctionDeclaration(
 )
 
 # ---------------------------------------------------------------------------
+# get_bot_commands
+# ---------------------------------------------------------------------------
+
+_get_bot_commands = types.FunctionDeclaration(
+    name="get_bot_commands",
+    description=(
+        "List slash commands registered in the server, grouped by bot. "
+        "Pass bot='all' to see every bot's commands. "
+        "Pass a bot display name or user ID to see commands for that specific bot only."
+    ),
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "bot": types.Schema(
+                type=types.Type.STRING,
+                description=(
+                    "The bot to look up. Use 'all' to return commands for all bots. "
+                    "Or pass a bot's display name (e.g. 'MEE6') or Discord user ID."
+                ),
+            ),
+        },
+        required=["bot"],
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # fix_bot_access
 # ---------------------------------------------------------------------------
 
@@ -564,8 +591,9 @@ TOOLS = types.Tool(
         _set_reminder,
         _list_reminders,
         _delete_reminder,
-        # Phase 2.5 — bot scanner
+        # Phase 2.5 — bot scanner + command inspector
         _scan_bots,
+        _get_bot_commands,
         # Phase 3 — guarded write tools
         _assign_role,
         _remove_role,
@@ -593,6 +621,7 @@ TOOL_LABELS: dict[str, str] = {
     "get_audit_log":            "Reading audit log",
     "bulk_permission_audit":    "Scanning all channels for permission issues",
     "scan_bots":                "Scanning bots in the server",
+    "get_bot_commands":         "Fetching bot slash commands",
     "manage_server":            "Server action",
     "set_reminder":             "Setting reminder",
     "list_reminders":           "Listing reminders",
@@ -805,6 +834,8 @@ async def dispatch(
             return await bulk_permission_audit(_guild())
         case "scan_bots":
             return await scan_bots(_guild())
+        case "get_bot_commands":
+            return await get_bot_commands(_guild(), bot=args.get("bot", "all"))
         # Reminders & birthdays
         case "set_reminder":
             return await set_reminder(

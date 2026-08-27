@@ -382,6 +382,7 @@ warden/
     ├── test_tool_schemas.py      # describe_write_action unit tests
     ├── test_guardrails.py        # auth allowlist unit tests
     ├── test_tools_moderation.py  # moderation tool unit tests + allowlist enforcement
+    ├── test_tools_get_bot_commands.py # get_bot_commands unit tests
     └── test_llm_integration.py  # end-to-end: real Gemini API, verifies tool selection
 ```
 
@@ -395,7 +396,7 @@ warden/
 uv run pytest -m "not llm" -v
 ```
 
-118 tests covering tool logic, search backends, reminder CRUD, moderation actions, allowlist enforcement, orchestrator helpers, write-action descriptions, and auth — all using an isolated in-memory SQLite DB via the `tmp_db` fixture. Discord objects are mocked; no real bot token or API key required.
+134 tests covering tool logic, search backends, reminder CRUD, moderation actions, allowlist enforcement, orchestrator helpers, write-action descriptions, bot command inspection, and auth — all using an isolated in-memory SQLite DB via the `tmp_db` fixture. Discord objects are mocked; no real bot token or API key required.
 
 ### LLM integration tests (real Gemini API)
 
@@ -403,7 +404,7 @@ uv run pytest -m "not llm" -v
 uv run pytest -m llm -v
 ```
 
-32 tests that send natural-language prompts to the real Gemini API and assert that the correct tool was selected with the correct arguments extracted (channel IDs resolved from names, dates parsed, repeat intervals set, etc.). Requires `GEMINI_API_KEY` in `.env`. Tests are skipped automatically if the key is absent or set to the placeholder value.
+45 tests that send natural-language prompts to the real Gemini API and assert that the correct tool was selected with the correct arguments extracted (channel IDs resolved from names, dates parsed, repeat intervals set, etc.). Requires `GEMINI_API_KEY` in `.env`. Tests are skipped automatically if the key is absent or set to the placeholder value.
 
 A 4-second pause is added between each test to stay within the free-tier rate limit of 15 requests/minute. Full suite takes ~3.5 minutes.
 

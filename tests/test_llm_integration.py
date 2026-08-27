@@ -429,3 +429,27 @@ async def test_rename_channel_selected():
     assert fc.args.get("action") == "rename_channel"
     assert fc.args.get("channel_id") == "333333333333333333"
     assert "general-chat" in fc.args.get("new_name", "").lower()
+
+
+# ---------------------------------------------------------------------------
+# get_bot_commands
+# ---------------------------------------------------------------------------
+
+async def test_get_bot_commands_all_selected():
+    fc = await _first_tool("What slash commands do all the bots in this server have?")
+    assert fc is not None
+    assert fc.name == "get_bot_commands"
+    assert fc.args.get("bot") == "all"
+
+
+async def test_get_bot_commands_specific_bot_by_name():
+    fc = await _first_tool("What commands does MEE6 have?")
+    assert fc is not None
+    assert fc.name == "get_bot_commands"
+    assert "mee6" in fc.args.get("bot", "").lower()
+
+
+async def test_get_bot_commands_not_scan_bots():
+    fc = await _first_tool("List all the slash commands available from server bots")
+    assert fc is not None
+    assert fc.name == "get_bot_commands"

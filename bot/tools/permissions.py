@@ -442,3 +442,105 @@ async def fix_bot_access(
             ),
         },
     }
+
+
+async def get_bot_commands(guild: discord.Guild, bot: str = "all") -> dict:
+    """Return slash commands registered in the guild, grouped by the bot that owns them.
+
+    Args:
+        bot: A bot display name, user ID, or the literal string "all".
+             "all" returns commands for every bot in the server.
+             A specific name/ID filters to just that bot's commands.
+    """
+    guild_commands = await guild.fetch_commands()
+
+    # Build a map of application_id -> member for bots present in the guild.
+    # guild.fetch_commands() returns AppCommand objects whose application_id is the bot's user ID.
+    bot_members: dict[int, discord.Member] = {
+        m.id: m for m in guild.members if m.bot
+    }
+
+    def _format_option(opt: discord.app_commands.AppCommandOption) -> dict:
+        result: dict = {
+            "name": opt.name,
+            "description": opt.description,
+            "type": opt.type.name,
+            "required": getattr(opt, "required", False),
+        }
+        if hasattr(opt, "choices") and opt.choices:
+            result["choices"] = [c.name for c in opt.choices]
+        if hasattr(opt, "options") and opt.options:
+            result["options"] = [_format_option(o) for o in opt.options]
+        return result
+
+    def _format_command(cmd: discord.app_commands.AppCommand) -> dict:
+        entry: dict = {
+            "name": cmd.name,
+            "description": cmd.description,
+        }
+        if cmd.options:
+            entry["options"] = [_format_option(o) for o in cmd.options]
+        return entry
+
+    # Group commands by application_id
+    grouped: dict[int, list] = {}
+    for cmd in guild_commands:
+        grouped.setdefault(cmd.application_id, []).append(cmd)
+
+    # If filtering to a specific bot, resolve the target application_id
+    target_id: int | None = None
+    if bot != "all":
+        # Try numeric ID first
+        try:
+            target_id = int(bot)
+        except ValueError:
+            pass
+        # Fall back to name match against guild members
+        if target_id is None:
+            name_lower = bot.lower()
+            match = next(
+                (m for m in guild.members if m.bot and name_lower in m.display_name.lower()),
+                None,
+            )
+            if match is None:
+                return {"error": f"No bot named '{bot}' found in this server."}
+            target_id = match.id
+
+        if target_id not in grouped:
+            member = bot_members.get(target_id)
+            bot_name = member.display_name if member else str(target_id)
+            return {
+                "bot": bot_name,
+                "bot_id": str(target_id),
+                "command_count": 0,
+                "commands": [],
+                "note": "This bot has no guild-specific slash commands registered.",
+            }
+
+        app_id = target_id
+        member = bot_members.get(app_id)
+        commands = grouped[app_id]
+        return {
+            "bot": member.display_name if member else str(app_id),
+            "bot_id": str(app_id),
+            "command_count": len(commands),
+            "commands": [_format_command(c) for c in sorted(commands, key=lambda c: c.name)],
+        }
+
+    # "all" — return every bot's commands as a list
+    results = []
+    for app_id, commands in sorted(grouped.items()):
+        member = bot_members.get(app_id)
+        results.append({
+            "bot": member.display_name if member else f"unknown bot ({app_id})",
+            "bot_id": str(app_id),
+            "command_count": len(commands),
+            "commands": [_format_command(c) for c in sorted(commands, key=lambda c: c.name)],
+        })
+
+    total = sum(r["command_count"] for r in results)
+    return {
+        "total_commands": total,
+        "bot_count": len(results),
+        "bots": results,
+    }
