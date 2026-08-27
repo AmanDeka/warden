@@ -1,4 +1,4 @@
-"""Tools: set_reminder, set_birthday, list_reminders, delete_reminder."""
+"""Tools: set_reminder, list_reminders, delete_reminder."""
 
 from __future__ import annotations
 
@@ -37,17 +37,38 @@ async def set_reminder(
     created_by: int,
     target_user_id: int,
     message: str,
-    remind_at: datetime,
     channel_id: int,
+    remind_at: datetime | None = None,
     repeat: str | None = None,
     category: str = "general",
     tag: str | None = None,
+    birthday_month: int | None = None,
+    birthday_day: int | None = None,
 ) -> dict:
-    """Create a reminder. Returns the new reminder ID."""
-    if remind_at.tzinfo is None:
-        remind_at = remind_at.replace(tzinfo=timezone.utc)
+    """Create a reminder or birthday reminder. Returns the new reminder ID.
 
-    now = datetime.now(timezone.utc).isoformat()
+    For birthdays: set category='birthday', provide birthday_month and birthday_day,
+    and set tag to the person's name. remind_at is calculated automatically.
+    For general reminders: provide remind_at as a UTC datetime.
+    """
+    now_dt = datetime.now(timezone.utc)
+
+    if category == "birthday":
+        if birthday_month is None or birthday_day is None:
+            return {"error": "birthday_month and birthday_day are required when category='birthday'."}
+        try:
+            candidate = datetime(now_dt.year, birthday_month, birthday_day, 9, 0, tzinfo=timezone.utc)
+        except ValueError:
+            return {"error": f"Invalid date: month={birthday_month} day={birthday_day}"}
+        remind_at = candidate if candidate > now_dt else candidate.replace(year=now_dt.year + 1)
+        repeat = repeat or "yearly"
+    else:
+        if remind_at is None:
+            return {"error": "remind_at is required for non-birthday reminders."}
+        if remind_at.tzinfo is None:
+            remind_at = remind_at.replace(tzinfo=timezone.utc)
+
+    now = now_dt.isoformat()
     async with connect() as conn:
         cursor = await conn.execute(
             """
@@ -71,41 +92,6 @@ async def set_reminder(
         "fires_at": remind_at.strftime("%Y-%m-%d %H:%M UTC"),
         "repeat": repeat,
     }
-
-
-async def set_birthday(
-    guild_id: int,
-    created_by: int,
-    person_name: str,
-    month: int,
-    day: int,
-    channel_id: int,
-    person_user_id: int | None = None,
-) -> dict:
-    """Register a yearly birthday reminder for a person."""
-    now = datetime.now(timezone.utc)
-    try:
-        candidate = datetime(now.year, month, day, 9, 0, tzinfo=timezone.utc)
-    except ValueError:
-        return {"error": f"Invalid date: month={month} day={day}"}
-
-    # If this year's birthday has already passed, schedule for next year
-    next_birthday = candidate if candidate > now else candidate.replace(year=now.year + 1)
-
-    ping_id = person_user_id if person_user_id is not None else created_by
-    message = f"🎂 Today is **{person_name}**'s birthday! Wishing them a wonderful day! 🎉"
-
-    return await set_reminder(
-        guild_id=guild_id,
-        created_by=created_by,
-        target_user_id=ping_id,
-        message=message,
-        remind_at=next_birthday,
-        channel_id=channel_id,
-        repeat="yearly",
-        category="birthday",
-        tag=person_name,
-    )
 
 
 async def list_reminders(guild_id: int, user_id: int) -> dict:
