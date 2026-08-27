@@ -156,6 +156,7 @@ bot.tree.add_command(index_group, guild=discord.Object(id=GUILD_ID))
 allowlist_group = app_commands.Group(
     name="permissions-allowlist",
     description="Manage which roles can use Warden's write/permission tools (owner only)",
+    default_permissions=discord.Permissions(administrator=True),
 )
 
 
