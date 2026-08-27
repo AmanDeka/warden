@@ -381,6 +381,7 @@ warden/
     ├── test_orchestrator.py      # _strip_mention, _build_context unit tests
     ├── test_tool_schemas.py      # describe_write_action unit tests
     ├── test_guardrails.py        # auth allowlist unit tests
+    ├── test_tools_moderation.py  # moderation tool unit tests + allowlist enforcement
     └── test_llm_integration.py  # end-to-end: real Gemini API, verifies tool selection
 ```
 
@@ -394,7 +395,7 @@ warden/
 uv run pytest -m "not llm" -v
 ```
 
-82 tests covering tool logic, search backends, reminder CRUD, orchestrator helpers, write-action descriptions, and auth — all using an isolated in-memory SQLite DB via the `tmp_db` fixture. Discord objects are mocked; no real bot token or API key required.
+118 tests covering tool logic, search backends, reminder CRUD, moderation actions, allowlist enforcement, orchestrator helpers, write-action descriptions, and auth — all using an isolated in-memory SQLite DB via the `tmp_db` fixture. Discord objects are mocked; no real bot token or API key required.
 
 ### LLM integration tests (real Gemini API)
 
