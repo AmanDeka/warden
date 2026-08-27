@@ -205,6 +205,30 @@ Permanently deletes a role. Refuses to delete integration-managed roles.
 
 Diagnoses why another bot can't operate in a channel. Resolves the bot by display name or user ID, walks the full permission stack (server roles → category overwrite → channel overwrite), and identifies which required permissions are missing and why. Returns a ready-to-use `set_channel_permission` call as the proposed fix — does not apply it automatically.
 
+#### `scan_bots()`
+
+Lists all bots in the server with their roles and flags any holding dangerous permissions (`administrator`, `manage_roles`, `ban_members`, `kick_members`, `manage_guild`, etc.). Useful for auditing over-privileged integrations. Read-only — no confirmation required.
+
+### Reminders & calendar
+
+Reminders are stored in SQLite and survive bot restarts. A background task checks every minute and delivers any due reminders by pinging the target user in the configured channel.
+
+#### `set_reminder(created_by, target_user_id, message, remind_at, channel_id, repeat?)`
+
+Creates a reminder. `remind_at` is an ISO 8601 UTC datetime. `repeat` is optional and accepts `daily`, `weekly`, `monthly`, or `yearly`. Missed reminders (e.g. bot was offline) are delivered on the next tick after restart rather than silently skipped.
+
+#### `set_birthday(created_by, person_name, month, day, channel_id, person_user_id?)`
+
+Registers a yearly birthday reminder for a person. Automatically repeats every year. If `person_user_id` is provided, pings that user on their birthday; otherwise pings the person who set the reminder.
+
+#### `list_reminders(user_id)`
+
+Shows all active reminders (including birthdays) created by a user, sorted by next fire time.
+
+#### `delete_reminder(reminder_id, user_id)`
+
+Cancels an active reminder by ID. Only the creator can cancel it.
+
 ### Storage
 
 | Table | Purpose |
@@ -217,6 +241,7 @@ Diagnoses why another bot can't operate in a channel. Resolves the bot by displa
 | `permission_allowlist` | Roles authorised to use write/permission tools |
 | `indexed_channels` | Whitelist of channels the indexer watches (empty = all channels) |
 | `settings` | Runtime key/value config (e.g. `search_method`) |
+| `reminders` | Active and completed reminders (one-time and repeating) |
 
 ### Channel index whitelist
 
@@ -312,12 +337,15 @@ warden/
 │   │   ├── embeddings.py     # Gemini embedding helpers, cosine similarity
 │   │   ├── media.py          # find_media
 │   │   ├── summarize.py      # summarize_channel
-│   │   ├── permissions.py    # list_permissions, list_roles, get_member_roles
+│   │   ├── permissions.py    # list_permissions, list_roles, get_member_roles, scan_bots
+│   │   ├── reminders.py      # set_reminder, set_birthday, list_reminders, delete_reminder
 │   │   └── audit.py          # get_audit_log, bulk_permission_audit
 │   ├── indexer/
 │   │   ├── listener.py       # real-time message index + embedding generation
 │   │   ├── backfill.py       # one-time throttled history backfill on startup
 │   │   └── retention_sweep.py # scheduled purge of old soft-deleted rows
+│   ├── reminders/
+│   │   └── scheduler.py      # 1-minute background task: fire due reminders
 │   ├── guardrails/
 │   │   ├── confirmation.py   # diff preview + ✅/❌ reaction confirm flow
 │   │   └── auth.py           # allowlist check for write tools
