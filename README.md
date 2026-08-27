@@ -231,13 +231,11 @@ Lists all bots in the server with their roles and flags any holding dangerous pe
 
 Reminders are stored in SQLite and survive bot restarts. A background task checks every minute and delivers any due reminders by pinging the target user in the configured channel.
 
-#### `set_reminder(created_by, target_user_id, message, remind_at, channel_id, repeat?)`
+#### `set_reminder(created_by, target_user_id, message, channel_id, remind_at?, repeat?, category?, tag?, birthday_month?, birthday_day?)`
 
-Creates a reminder. `remind_at` is an ISO 8601 UTC datetime. `repeat` is optional and accepts `daily`, `weekly`, `monthly`, or `yearly`. Missed reminders (e.g. bot was offline) are delivered on the next tick after restart rather than silently skipped.
+Creates a reminder. For general reminders, provide `remind_at` as an ISO 8601 UTC datetime. `repeat` accepts `daily`, `weekly`, `monthly`, or `yearly`. Missed reminders (e.g. bot was offline) are delivered on the next tick after restart rather than silently skipped.
 
-#### `set_birthday(created_by, person_name, month, day, channel_id, person_user_id?)`
-
-Registers a yearly birthday reminder for a person. Automatically repeats every year. If `person_user_id` is provided, pings that user on their birthday; otherwise pings the person who set the reminder.
+Birthdays are a subcategory of this same tool — set `category='birthday'`, provide `birthday_month` and `birthday_day`, and set `tag` to the person's name. `remind_at` is calculated automatically and the reminder repeats yearly. No separate birthday tool needed.
 
 #### `list_reminders(user_id)`
 
