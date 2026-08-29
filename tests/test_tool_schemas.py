@@ -28,7 +28,7 @@ def _make_guild(role_name="Mods", member_name="Dave", channel_name="general"):
 
 def test_describe_assign_role():
     guild = _make_guild(role_name="Mods", member_name="Alice")
-    result = describe_write_action("assign_role", {"role_id": "1", "user_id": "2"}, guild)
+    result = describe_write_action("manage_roles", {"action": "assign", "role_id": "1", "user_id": "2"}, guild)
     assert "Mods" in result
     assert "Alice" in result
     assert "Assign" in result
@@ -36,7 +36,7 @@ def test_describe_assign_role():
 
 def test_describe_remove_role():
     guild = _make_guild(role_name="Mods", member_name="Alice")
-    result = describe_write_action("remove_role", {"role_id": "1", "user_id": "2"}, guild)
+    result = describe_write_action("manage_roles", {"action": "remove", "role_id": "1", "user_id": "2"}, guild)
     assert "Remove" in result
     assert "Mods" in result
     assert "Alice" in result
@@ -74,8 +74,8 @@ def test_describe_set_channel_permission_empty_lists():
 
 def test_describe_create_role():
     result = describe_write_action(
-        "create_role",
-        {"name": "NewRole", "permissions": ["send_messages", "view_channel"]},
+        "manage_roles",
+        {"action": "create", "name": "NewRole", "permissions": ["send_messages", "view_channel"]},
         None,
     )
     assert "NewRole" in result
@@ -83,14 +83,14 @@ def test_describe_create_role():
 
 
 def test_describe_create_role_no_permissions():
-    result = describe_write_action("create_role", {"name": "Empty"}, None)
+    result = describe_write_action("manage_roles", {"action": "create", "name": "Empty"}, None)
     assert "Empty" in result
     assert "none" in result
 
 
 def test_describe_delete_role():
     guild = _make_guild(role_name="OldRole")
-    result = describe_write_action("delete_role", {"role_id": "5"}, guild)
+    result = describe_write_action("manage_roles", {"action": "delete", "role_id": "5"}, guild)
     assert "OldRole" in result
 
 
