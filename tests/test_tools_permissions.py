@@ -10,6 +10,7 @@ from bot.tools.permissions import (
     _permission_names,
     assign_role,
     get_member_roles,
+    get_role_members,
     list_permissions,
     list_roles,
     remove_role,
@@ -329,3 +330,94 @@ async def test_remove_role_forbidden():
     member.remove_roles = AsyncMock(side_effect=discord.Forbidden(MagicMock(status=403), "forbidden"))
     result = await remove_role(guild, member.id, role.id)
     assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# get_role_members
+# ---------------------------------------------------------------------------
+
+def _make_role_member(name: str, user_id: int):
+    m = MagicMock()
+    m.display_name = name
+    m.id = user_id
+    m.joined_at = None
+    return m
+
+
+async def test_get_role_members_found():
+    member_a = _make_role_member("Alice", 1)
+    member_b = _make_role_member("Bob", 2)
+
+    role = MagicMock()
+    role.name = "Moderator"
+    role.id = 10
+    role.members = [member_b, member_a]  # unsorted intentionally
+
+    guild = MagicMock()
+    guild.get_role.return_value = role
+
+    result = await get_role_members(guild, 10)
+    assert result["role"] == "Moderator"
+    assert result["member_count"] == 2
+    # sorted alphabetically
+    assert result["members"][0]["name"] == "Alice"
+    assert result["members"][1]["name"] == "Bob"
+
+
+async def test_get_role_members_empty():
+    role = MagicMock()
+    role.name = "EmptyRole"
+    role.id = 20
+    role.members = []
+
+    guild = MagicMock()
+    guild.get_role.return_value = role
+
+    result = await get_role_members(guild, 20)
+    assert result["member_count"] == 0
+    assert result["members"] == []
+
+
+async def test_get_role_members_not_found():
+    guild = MagicMock()
+    guild.get_role.return_value = None
+    result = await get_role_members(guild, 999)
+    assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# is_write_call / get_tool_label (schema helpers)
+# ---------------------------------------------------------------------------
+
+from bot.agent.tool_schemas import get_tool_label, is_write_call
+
+
+def test_is_write_call_manage_roles_write_actions():
+    for action in ("assign", "remove", "create", "delete"):
+        assert is_write_call("manage_roles", {"action": action})
+
+
+def test_is_write_call_manage_roles_read_actions():
+    for action in ("list", "get_member_roles", "get_role_members"):
+        assert not is_write_call("manage_roles", {"action": action})
+
+
+def test_is_write_call_other_write_tools():
+    assert is_write_call("set_channel_permission", {})
+    assert is_write_call("manage_server", {"action": "kick"})
+
+
+def test_is_write_call_read_tools():
+    assert not is_write_call("list_permissions", {})
+    assert not is_write_call("get_audit_log", {})
+
+
+def test_get_tool_label_manage_roles():
+    assert get_tool_label("manage_roles", {"action": "assign"}) == "Assigning role"
+    assert get_tool_label("manage_roles", {"action": "list"}) == "Listing roles"
+    assert get_tool_label("manage_roles", {"action": "get_role_members"}) == "Getting role members"
+
+
+def test_get_tool_label_fallback():
+    assert get_tool_label("list_permissions", {}) == "Checking permissions"
+    assert get_tool_label("unknown_tool", {}) == "unknown_tool"

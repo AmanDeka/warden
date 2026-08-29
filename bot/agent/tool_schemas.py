@@ -23,6 +23,7 @@ from bot.tools.permissions import (
     fix_bot_access,
     get_bot_commands,
     get_member_roles,
+    get_role_members,
     list_permissions,
     list_roles,
     remove_role,
@@ -200,34 +201,52 @@ _list_permissions = types.FunctionDeclaration(
 )
 
 # ---------------------------------------------------------------------------
-# list_roles
+# manage_roles  (unified role tool)
 # ---------------------------------------------------------------------------
 
-_list_roles = types.FunctionDeclaration(
-    name="list_roles",
-    description="List all roles in the server with their permissions, position, and member count.",
-    parameters=types.Schema(
-        type=types.Type.OBJECT,
-        properties={},
+_manage_roles = types.FunctionDeclaration(
+    name="manage_roles",
+    description=(
+        "Unified role management tool. Choose an action and supply the relevant arguments:\n"
+        "- list: list all server roles with metadata and member counts\n"
+        "- get_member_roles: list roles held by a specific member (user_id)\n"
+        "- get_role_members: list all members assigned to a role (role_id)\n"
+        "- assign: add a role to a member (user_id, role_id) — requires confirmation\n"
+        "- remove: remove a role from a member (user_id, role_id) — requires confirmation\n"
+        "- create: create a new role (name, permissions?, color?) — requires confirmation\n"
+        "- delete: permanently delete a role (role_id) — requires confirmation"
     ),
-)
-
-# ---------------------------------------------------------------------------
-# get_member_roles
-# ---------------------------------------------------------------------------
-
-_get_member_roles = types.FunctionDeclaration(
-    name="get_member_roles",
-    description="Get the roles assigned to a specific server member.",
     parameters=types.Schema(
         type=types.Type.OBJECT,
         properties={
+            "action": types.Schema(
+                type=types.Type.STRING,
+                enum=["list", "get_member_roles", "get_role_members", "assign", "remove", "create", "delete"],
+                description="The role operation to perform.",
+            ),
             "user_id": types.Schema(
                 type=types.Type.STRING,
-                description="Discord user ID of the member to look up.",
+                description="Discord user ID. Required for: get_member_roles, assign, remove.",
+            ),
+            "role_id": types.Schema(
+                type=types.Type.STRING,
+                description="Discord role ID. Required for: get_role_members, assign, remove, delete.",
+            ),
+            "name": types.Schema(
+                type=types.Type.STRING,
+                description="Role name. Required for: create.",
+            ),
+            "permissions": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(type=types.Type.STRING),
+                description="List of discord.py permission names (snake_case). Optional for: create.",
+            ),
+            "color": types.Schema(
+                type=types.Type.STRING,
+                description="Hex color code, e.g. #ff0000. Optional for: create.",
             ),
         },
-        required=["user_id"],
+        required=["action"],
     ),
 )
 
@@ -276,40 +295,6 @@ _bulk_permission_audit = types.FunctionDeclaration(
 )
 
 # ---------------------------------------------------------------------------
-# assign_role
-# ---------------------------------------------------------------------------
-
-_assign_role = types.FunctionDeclaration(
-    name="assign_role",
-    description="Add a role to a server member. Requires confirmation.",
-    parameters=types.Schema(
-        type=types.Type.OBJECT,
-        properties={
-            "user_id": types.Schema(type=types.Type.STRING, description="Discord user ID of the member."),
-            "role_id": types.Schema(type=types.Type.STRING, description="Discord role ID to assign."),
-        },
-        required=["user_id", "role_id"],
-    ),
-)
-
-# ---------------------------------------------------------------------------
-# remove_role
-# ---------------------------------------------------------------------------
-
-_remove_role = types.FunctionDeclaration(
-    name="remove_role",
-    description="Remove a role from a server member. Requires confirmation.",
-    parameters=types.Schema(
-        type=types.Type.OBJECT,
-        properties={
-            "user_id": types.Schema(type=types.Type.STRING, description="Discord user ID of the member."),
-            "role_id": types.Schema(type=types.Type.STRING, description="Discord role ID to remove."),
-        },
-        required=["user_id", "role_id"],
-    ),
-)
-
-# ---------------------------------------------------------------------------
 # set_channel_permission
 # ---------------------------------------------------------------------------
 
@@ -337,47 +322,6 @@ _set_channel_permission = types.FunctionDeclaration(
             ),
         },
         required=["channel_id", "target_id"],
-    ),
-)
-
-# ---------------------------------------------------------------------------
-# create_role
-# ---------------------------------------------------------------------------
-
-_create_role = types.FunctionDeclaration(
-    name="create_role",
-    description="Create a new server role. Requires confirmation.",
-    parameters=types.Schema(
-        type=types.Type.OBJECT,
-        properties={
-            "name": types.Schema(type=types.Type.STRING, description="Name for the new role."),
-            "permissions": types.Schema(
-                type=types.Type.ARRAY,
-                items=types.Schema(type=types.Type.STRING),
-                description="List of discord.py permission names to grant (snake_case). Omit for no permissions.",
-            ),
-            "color": types.Schema(
-                type=types.Type.STRING,
-                description="Hex color code for the role, e.g. #ff0000. Omit for default.",
-            ),
-        },
-        required=["name"],
-    ),
-)
-
-# ---------------------------------------------------------------------------
-# delete_role
-# ---------------------------------------------------------------------------
-
-_delete_role = types.FunctionDeclaration(
-    name="delete_role",
-    description="Permanently delete a server role. Requires confirmation.",
-    parameters=types.Schema(
-        type=types.Type.OBJECT,
-        properties={
-            "role_id": types.Schema(type=types.Type.STRING, description="ID of the role to delete."),
-        },
-        required=["role_id"],
     ),
 )
 
@@ -581,8 +525,7 @@ TOOLS = types.Tool(
         _find_media,
         # Phase 2 — permission introspection
         _list_permissions,
-        _list_roles,
-        _get_member_roles,
+        _manage_roles,
         _get_audit_log,
         _bulk_permission_audit,
         # Moderation & channel management
@@ -595,11 +538,7 @@ TOOLS = types.Tool(
         _scan_bots,
         _get_bot_commands,
         # Phase 3 — guarded write tools
-        _assign_role,
-        _remove_role,
         _set_channel_permission,
-        _create_role,
-        _delete_role,
         _fix_bot_access,
     ]
 )
@@ -610,14 +549,13 @@ TOOL_SCHEMAS: list[types.Tool] = [TOOLS]
 # Write-tool registry
 # ---------------------------------------------------------------------------
 
-TOOL_LABELS: dict[str, str] = {
+_TOOL_LABELS: dict[str, str] = {
     "search_messages":          "Searching messages",
     "find_message_by_context":  "Finding message by description",
     "summarize_channel":        "Fetching messages to summarize",
     "find_media":               "Searching for media",
     "list_permissions":         "Checking permissions",
-    "list_roles":               "Listing roles",
-    "get_member_roles":         "Getting member's roles",
+    "manage_roles":             "Role action",
     "get_audit_log":            "Reading audit log",
     "bulk_permission_audit":    "Scanning all channels for permission issues",
     "scan_bots":                "Scanning bots in the server",
@@ -626,24 +564,49 @@ TOOL_LABELS: dict[str, str] = {
     "set_reminder":             "Setting reminder",
     "list_reminders":           "Listing reminders",
     "delete_reminder":          "Cancelling reminder",
-    "assign_role":              "Assigning role",
-    "remove_role":              "Removing role",
     "set_channel_permission":   "Setting channel permission",
     "clean_permissions":        "Cleaning permissions",
-    "create_role":              "Creating role",
-    "delete_role":              "Deleting role",
     "fix_bot_access":           "Diagnosing bot access",
 }
 
+_MANAGE_ROLES_ACTION_LABELS: dict[str, str] = {
+    "list":             "Listing roles",
+    "get_member_roles": "Getting member's roles",
+    "get_role_members": "Getting role members",
+    "assign":           "Assigning role",
+    "remove":           "Removing role",
+    "create":           "Creating role",
+    "delete":           "Deleting role",
+}
+
+WRITE_ROLE_ACTIONS: frozenset[str] = frozenset({"assign", "remove", "create", "delete"})
+
 WRITE_TOOLS: frozenset[str] = frozenset({
-    "assign_role",
-    "remove_role",
     "set_channel_permission",
     "clean_permissions",
-    "create_role",
-    "delete_role",
     "manage_server",
 })
+
+
+def is_write_call(tool_name: str, args: dict) -> bool:
+    """Return True if this tool call requires auth + confirmation."""
+    if tool_name in WRITE_TOOLS:
+        return True
+    if tool_name == "manage_roles" and args.get("action") in WRITE_ROLE_ACTIONS:
+        return True
+    return False
+
+
+def get_tool_label(tool_name: str, args: dict) -> str:
+    """Return a human-readable status label for the tool call."""
+    if tool_name == "manage_roles":
+        action = args.get("action", "")
+        return _MANAGE_ROLES_ACTION_LABELS.get(action, "Role action")
+    return _TOOL_LABELS.get(tool_name, tool_name)
+
+
+# Keep TOOL_LABELS as a public alias for backwards-compat in case anything imports it directly.
+TOOL_LABELS = _TOOL_LABELS
 
 
 def describe_write_action(tool_name: str, args: dict, guild: discord.Guild | None) -> str:
@@ -697,10 +660,20 @@ def describe_write_action(tool_name: str, args: dict, guild: discord.Guild | Non
         return f"target {val}"
 
     match tool_name:
-        case "assign_role":
-            return f"Assign {_role('role_id')} → {_member('user_id')}"
-        case "remove_role":
-            return f"Remove {_role('role_id')} from {_member('user_id')}"
+        case "manage_roles":
+            action = args.get("action", "?")
+            match action:
+                case "assign":
+                    return f"Assign {_role('role_id')} → {_member('user_id')}"
+                case "remove":
+                    return f"Remove {_role('role_id')} from {_member('user_id')}"
+                case "create":
+                    perms = ", ".join(args.get("permissions", [])) or "none"
+                    return f"Create role **{args.get('name', '?')}** — permissions: {perms}"
+                case "delete":
+                    return f"Delete {_role('role_id')}"
+                case _:
+                    return f"manage_roles action={action} args={args}"
         case "set_channel_permission":
             allow = ", ".join(args.get("allow", [])) or "none"
             deny = ", ".join(args.get("deny", [])) or "none"
@@ -712,11 +685,6 @@ def describe_write_action(tool_name: str, args: dict, guild: discord.Guild | Non
         case "clean_permissions":
             policy = args.get("policy", "sync_to_category")
             return f"Clean permissions on {_channel('channel_id')} — policy: `{policy}`"
-        case "create_role":
-            perms = ", ".join(args.get("permissions", [])) or "none"
-            return f"Create role **{args.get('name', '?')}** — permissions: {perms}"
-        case "delete_role":
-            return f"Delete {_role('role_id')}"
         case "fix_bot_access":
             return (
                 f"Fix bot access in {_channel('channel_id')} "
@@ -820,10 +788,31 @@ async def dispatch(
         # Phase 2 — permission introspection tools
         case "list_permissions":
             return await list_permissions(_guild(), int(args["target_id"]))
-        case "list_roles":
-            return await list_roles(_guild())
-        case "get_member_roles":
-            return await get_member_roles(_guild(), int(args["user_id"]))
+        case "manage_roles":
+            action = args.get("action")
+            g = _guild()
+            match action:
+                case "list":
+                    return await list_roles(g)
+                case "get_member_roles":
+                    return await get_member_roles(g, int(args["user_id"]))
+                case "get_role_members":
+                    return await get_role_members(g, int(args["role_id"]))
+                case "assign":
+                    return await assign_role(g, int(args["user_id"]), int(args["role_id"]))
+                case "remove":
+                    return await remove_role(g, int(args["user_id"]), int(args["role_id"]))
+                case "create":
+                    return await create_role(
+                        g,
+                        name=args["name"],
+                        permissions=list(args.get("permissions") or []),
+                        color=args.get("color"),
+                    )
+                case "delete":
+                    return await delete_role(g, int(args["role_id"]))
+                case _:
+                    return {"error": f"Unknown manage_roles action: {action!r}"}
         case "get_audit_log":
             return await get_audit_log(
                 _guild(),
@@ -874,10 +863,6 @@ async def dispatch(
                 voice_channel_id=_int("voice_channel_id"),
             )
         # Phase 3 — guarded write tools
-        case "assign_role":
-            return await assign_role(_guild(), int(args["user_id"]), int(args["role_id"]))
-        case "remove_role":
-            return await remove_role(_guild(), int(args["user_id"]), int(args["role_id"]))
         case "set_channel_permission":
             return await set_channel_permission(
                 _guild(),
@@ -886,15 +871,6 @@ async def dispatch(
                 allow=list(args.get("allow") or []),
                 deny=list(args.get("deny") or []),
             )
-        case "create_role":
-            return await create_role(
-                _guild(),
-                name=args["name"],
-                permissions=list(args.get("permissions") or []),
-                color=args.get("color"),
-            )
-        case "delete_role":
-            return await delete_role(_guild(), int(args["role_id"]))
         case "fix_bot_access":
             return await fix_bot_access(
                 _guild(),

@@ -91,14 +91,15 @@ async def _first_tool(prompt: str) -> types.FunctionCall | None:
 async def test_list_roles_selected():
     fc = await _first_tool("What roles exist in this server?")
     assert fc is not None
-    assert fc.name == "list_roles"
+    assert fc.name == "manage_roles"
+    assert fc.args.get("action") == "list"
 
 
 async def test_list_roles_no_args():
     fc = await _first_tool("Show me all server roles")
     assert fc is not None
-    assert fc.name == "list_roles"
-    assert dict(fc.args) == {}
+    assert fc.name == "manage_roles"
+    assert fc.args.get("action") == "list"
 
 
 async def test_scan_bots_selected():
@@ -223,7 +224,8 @@ async def test_list_permissions_channel():
 async def test_get_member_roles_selected():
     fc = await _first_tool(f"What roles does <@{_USER_ID}> have?")
     assert fc is not None
-    assert fc.name == "get_member_roles"
+    assert fc.name == "manage_roles"
+    assert fc.args.get("action") == "get_member_roles"
     assert fc.args.get("user_id") == _USER_ID
 
 
@@ -333,7 +335,8 @@ async def test_assign_role_selected():
         f"Assign role id {_ROLE_ID} to user id {_USER_ID}"
     )
     assert fc is not None
-    assert fc.name == "assign_role"
+    assert fc.name == "manage_roles"
+    assert fc.args.get("action") == "assign"
     assert fc.args.get("role_id") == _ROLE_ID
     assert fc.args.get("user_id") == _USER_ID
 

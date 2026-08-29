@@ -8,7 +8,7 @@ import discord
 from google.genai import types
 
 from bot.agent.system_prompt import SYSTEM_PROMPT
-from bot.agent.tool_schemas import TOOL_LABELS, TOOL_SCHEMAS, WRITE_TOOLS, describe_write_action, dispatch
+from bot.agent.tool_schemas import TOOL_SCHEMAS, describe_write_action, dispatch, get_tool_label, is_write_call
 from bot.guardrails import auth, confirmation
 from bot.storage import db
 from bot.utils.formatting import status_embed
@@ -166,7 +166,7 @@ async def _run_loop(
 
         # --- Batch-confirm all write tools in this round with a single prompt ---
         write_calls = [
-            fc for fc in function_calls if fc.name in WRITE_TOOLS
+            fc for fc in function_calls if is_write_call(fc.name, dict(fc.args))
         ]
         batch_confirmed: bool | None = None  # None = not yet asked
 
@@ -214,11 +214,11 @@ async def _run_loop(
             args = dict(fc.args)
 
             # Write tools that were cancelled in the batch step — skip execution
-            if tool_name in WRITE_TOOLS and batch_confirmed is False:
+            if is_write_call(tool_name, args) and batch_confirmed is False:
                 continue
 
             # --- execute ---
-            label = TOOL_LABELS.get(tool_name, tool_name)
+            label = get_tool_label(tool_name, args)
             log.append(f"🔧 {label}...")
             await update_status()
             try:

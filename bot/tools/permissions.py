@@ -115,6 +115,28 @@ async def get_member_roles(guild: discord.Guild, user_id: int) -> dict:
     }
 
 
+async def get_role_members(guild: discord.Guild, role_id: int) -> dict:
+    """Return all members assigned to a specific role."""
+    role = guild.get_role(role_id)
+    if role is None:
+        return {"error": f"Role {role_id} not found."}
+
+    members = sorted(role.members, key=lambda m: m.display_name.lower())
+    return {
+        "role": role.name,
+        "role_id": str(role.id),
+        "member_count": len(members),
+        "members": [
+            {
+                "name": m.display_name,
+                "id": str(m.id),
+                "joined_at": m.joined_at.isoformat() if m.joined_at else None,
+            }
+            for m in members
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Phase 3 — write tools
 # ---------------------------------------------------------------------------
