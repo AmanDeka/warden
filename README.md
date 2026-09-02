@@ -293,7 +293,7 @@ The allowlist is stored in the `permission_allowlist` table and cached in memory
 - [x] `create_role` / `delete_role` — create or remove roles
 - [x] `fix_bot_access` — diagnose why another bot can't operate in a channel and propose a minimal fix
 - [x] Confirmation flow — bot proposes exact diff in the status embed, user reacts ✅/❌ to confirm or cancel
-- [ ] Full audit logging for all executed write actions
+- [x] Full audit logging for all executed write actions (success, denied, cancelled, and exceptions)
 
 ### Phase 4 — Cleanup automation
 
@@ -396,7 +396,7 @@ warden/
 uv run pytest -m "not llm" -v
 ```
 
-134 tests covering tool logic, search backends, reminder CRUD, moderation actions, allowlist enforcement, orchestrator helpers, write-action descriptions, bot command inspection, and auth — all using an isolated in-memory SQLite DB via the `tmp_db` fixture. Discord objects are mocked; no real bot token or API key required.
+154 tests covering tool logic, search backends, reminder CRUD, moderation actions, allowlist enforcement, orchestrator helpers, write-action descriptions, bot command inspection, auth, and audit logging — all using an isolated in-memory SQLite DB via the `tmp_db` fixture. Discord objects are mocked; no real bot token or API key required.
 
 ### LLM integration tests (real Gemini API)
 

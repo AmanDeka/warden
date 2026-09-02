@@ -173,15 +173,19 @@ async def _run_loop(
         if write_calls:
             # Auth check — applies to the whole batch
             if not isinstance(member, discord.Member) or not await auth.is_allowed(member):
+                denied_result = {
+                    "denied": (
+                        "Permission denied. Your roles are not on the "
+                        "permissions allowlist. Ask the server owner to run "
+                        "`/permissions-allowlist add @role`."
+                    )
+                }
                 for fc in write_calls:
+                    await _log_tool_call(user.id, fc.name, dict(fc.args), denied_result)
                     tool_response_parts.append(
                         types.Part.from_function_response(
                             name=fc.name,
-                            response={"error": (
-                                "Permission denied. Your roles are not on the "
-                                "permissions allowlist. Ask the server owner to run "
-                                "`/permissions-allowlist add @role`."
-                            )},
+                            response={"error": denied_result["denied"]},
                         )
                     )
                 log.append("🚫 Not authorised for write tools")
@@ -199,11 +203,13 @@ async def _run_loop(
                 status_msg, combined_diff, user, bot_client
             )
             if not batch_confirmed:
+                cancelled_result = {"cancelled": "The user cancelled this action."}
                 for fc in write_calls:
+                    await _log_tool_call(user.id, fc.name, dict(fc.args), cancelled_result)
                     tool_response_parts.append(
                         types.Part.from_function_response(
                             name=fc.name,
-                            response={"cancelled": "The user cancelled this action."},
+                            response=cancelled_result,
                         )
                     )
                 response = await chat.send_message(tool_response_parts)
@@ -233,10 +239,12 @@ async def _run_loop(
                 log[-1] = f"✅ {label}"
                 await update_status()
             except Exception as exc:
+                error_result = {"error": str(exc)}
+                await _log_tool_call(user.id, tool_name, args, error_result)
                 tool_response_parts.append(
                     types.Part.from_function_response(
                         name=tool_name,
-                        response={"error": str(exc)},
+                        response=error_result,
                     )
                 )
                 log[-1] = f"⚠️ {label}: {exc}"
