@@ -1,0 +1,12 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: warden
+
+    env_file:
+      - .env
+
+    restart: unless-stopped

@@ -1,0 +1,62 @@
+name: Test and Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        run: uv run pytest -m "not llm"
+
+  deploy:
+    name: Deploy to GCP
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to GCP VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+
+          script: |
+            set -e
+
+            cd ~/discord-python-bot
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            echo "Building Docker image..."
+            docker compose build
+
+            echo "Stopping old bot..."
+            docker compose down
+
+            echo "Starting new bot..."
+            docker compose up -d
+
+            echo "Deployment complete!"
+
+            echo "Container status:"
+            docker compose ps
