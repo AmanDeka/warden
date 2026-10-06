@@ -42,7 +42,7 @@ jobs:
           script: |
             set -e
 
-            cd ~/discord-python-bot
+            cd ~/warden
 
             echo "Pulling latest code..."
             git pull origin main
